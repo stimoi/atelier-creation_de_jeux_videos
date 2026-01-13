@@ -1,57 +1,3 @@
-def draw_tutorial_overlay():
-    global tutorial_button_rect
-    if not tutorial_visible or not current_tutorial_texts:
-        tutorial_button_rect = None
-        return
-
-    panel_margin_x = 50
-    panel_margin_y = 30
-    panel_width = SCREEN_WIDTH - panel_margin_x * 2
-    panel_height = 200
-    panel_x = panel_margin_x
-    panel_y = SCREEN_HEIGHT - panel_height - panel_margin_y
-    panel_rect = pygame.Rect(panel_x, panel_y, panel_width, panel_height)
-
-    tutorial_button_rect = panel_rect.copy()
-
-    panel_surface = pygame.Surface((panel_rect.width, panel_rect.height), pygame.SRCALPHA)
-    panel_surface.fill((12, 23, 42, 220))
-    pygame.draw.rect(panel_surface, (56, 130, 203, 220), panel_surface.get_rect(), 3, border_radius=18)
-
-    content_padding = 24
-    text_area_width = panel_rect.width - content_padding * 2
-    image_surface = _get_tutorial_image(220, panel_height - content_padding * 2)
-    image_width = image_surface.get_width() if image_surface else 0
-    if image_surface:
-        text_area_width -= image_width + 24
-
-    current_text = current_tutorial_texts[min(tutorial_index, len(current_tutorial_texts) - 1)]
-    wrapped_lines = _wrap_text_lines(current_text, small_font, text_area_width)
-
-    text_x = content_padding
-    text_y = content_padding
-    text_color = (235, 245, 255)
-    for line in wrapped_lines:
-        line_surf = small_font.render(line, True, text_color)
-        panel_surface.blit(line_surf, (text_x, text_y))
-        text_y += line_surf.get_height() + 6
-
-    progress_text = f"{tutorial_index + 1}/{len(current_tutorial_texts)}"
-    progress_surf = small_font.render(progress_text, True, (180, 210, 255))
-    panel_surface.blit(progress_surf, (text_x, panel_rect.height - content_padding - progress_surf.get_height()))
-
-    hint_text = "Cliquez pour continuer"
-    hint_surf = small_font.render(hint_text, True, (120, 180, 255))
-    hint_pos_x = panel_rect.width - content_padding - hint_surf.get_width() - (image_width + 24 if image_surface else 0)
-    panel_surface.blit(hint_surf, (max(text_x, hint_pos_x), panel_rect.height - content_padding - hint_surf.get_height()))
-
-    if image_surface:
-        img_x = panel_rect.width - content_padding - image_surface.get_width()
-        img_y = (panel_rect.height - image_surface.get_height()) // 2
-        panel_surface.blit(image_surface, (img_x, img_y))
-
-    screen.blit(panel_surface, panel_rect.topleft)
-
 import pygame
 import random
 import math
@@ -61,6 +7,7 @@ from copy import deepcopy
 
 # === Initialisation ===
 pygame.init()
+pygame.display.set_caption("Steel Reborn")
 screen = pygame.display.set_mode((1366, 769))
 clock = pygame.time.Clock()
 font = pygame.font.SysFont(None, 48)
@@ -212,7 +159,61 @@ def select_tutorial_for_level(level):
     tutorial_visible = False
 
 
-def start_tutorial_display():
+def draw_tutorial_overlay():
+    global tutorial_button_rect
+    if not tutorial_visible or not current_tutorial_texts:
+        tutorial_button_rect = None
+        return
+
+    panel_margin_x = 50
+    panel_margin_y = 30
+    panel_width = SCREEN_WIDTH - panel_margin_x * 2
+    panel_height = 200
+    panel_x = panel_margin_x
+    panel_y = SCREEN_HEIGHT - panel_height - panel_margin_y
+    panel_rect = pygame.Rect(panel_x, panel_y, panel_width, panel_height)
+
+    tutorial_button_rect = panel_rect
+
+    panel_surface = pygame.Surface((panel_rect.width, panel_rect.height), pygame.SRCALPHA)
+    panel_surface.fill((12, 23, 42, 220))
+    pygame.draw.rect(panel_surface, (56, 130, 203, 220), panel_surface.get_rect(), 3, border_radius=18)
+
+    content_padding = 24
+    text_area_width = panel_rect.width - content_padding * 2
+    image_surface = _get_tutorial_image(220, panel_height - content_padding * 2)
+    image_width = image_surface.get_width() if image_surface else 0
+    if image_surface:
+        text_area_width -= image_width + 24
+
+    current_text = current_tutorial_texts[min(tutorial_index, len(current_tutorial_texts) - 1)]
+    wrapped_lines = _wrap_text_lines(current_text, small_font, text_area_width)
+
+    text_x = content_padding
+    text_y = content_padding
+    text_color = (235, 245, 255)
+    for line in wrapped_lines:
+        line_surf = small_font.render(line, True, text_color)
+        panel_surface.blit(line_surf, (text_x, text_y))
+        text_y += line_surf.get_height() + 6
+
+    progress_text = f"{tutorial_index + 1}/{len(current_tutorial_texts)}"
+    progress_surf = small_font.render(progress_text, True, (180, 210, 255))
+    panel_surface.blit(progress_surf, (text_x, panel_rect.height - content_padding - progress_surf.get_height()))
+
+    hint_text = "Cliquez pour continuer"
+    hint_surf = small_font.render(hint_text, True, (120, 180, 255))
+    hint_pos_x = panel_rect.width - content_padding - hint_surf.get_width() - (image_width + 24 if image_surface else 0)
+    panel_surface.blit(hint_surf, (max(text_x, hint_pos_x), panel_rect.height - content_padding - hint_surf.get_height()))
+
+    if image_surface:
+        img_x = panel_rect.width - content_padding - image_surface.get_width()
+        img_y = (panel_rect.height - image_surface.get_height()) // 2
+        panel_surface.blit(image_surface, (img_x, img_y))
+
+    screen.blit(panel_surface, panel_rect.topleft)
+
+def start_tutorial():
     global tutorial_visible, tutorial_index
     if current_tutorial_texts:
         tutorial_index = 0
@@ -221,7 +222,7 @@ def start_tutorial_display():
         tutorial_visible = False
 
 
-def hide_tutorial_display():
+def hide_tutorial():
     global tutorial_visible
     tutorial_visible = False
 
@@ -282,6 +283,7 @@ PANTS_COLOR = (30, 50, 90)
 SHOE_COLOR = (40, 40, 40)
 HAND_COLOR = (255, 220, 177)
 HAIR_COLOR = (60, 40, 20)
+SKIN_COLOR = (255, 220, 177)
 
 # === Particules ===
 particles = []
@@ -378,7 +380,7 @@ head_radius = 20
 body_height = 40
 leg_height = 30
 arm_length = 25
-skin_color = (255, 220, 177)
+
 player_vel_y = 0
 direction = 1
 walk_cycle = 0
@@ -396,7 +398,7 @@ dash_timer = 0.0
 dash_direction = 1
 
 player_pos.y = GROUND_Y - (head_radius + body_height + leg_height)
-spawn_point = player_pos.copy()
+spawn_point = player_pos
 
 # === Projectiles ===
 projectiles = []
@@ -539,7 +541,7 @@ def _default_level():
 
 levels = []
 levels_dir = os.path.dirname(__file__)
-level_filenames = ["level.json", "levels.json"]  # support ancien et nouveau nommage
+level_filenames = ["levels.json"]  # support ancien et nouveau nommage
 for name in level_filenames:
     level_path = os.path.join(levels_dir, name)
     if not os.path.isfile(level_path):
@@ -561,6 +563,14 @@ selected_level_idx = 0
 platforms = []
 goal_rect = pygame.Rect(0, 0, 0, 0)
 spawn_point = pygame.Vector2(0, 0)
+
+def load_image(img_name: str):
+    try:
+        loaded_img = pygame.image.load(img_name).convert_alpha()
+    except pygame.error as e:
+        print(f"Impossible de charger l'image : {e}")
+        pygame.quit()
+    return loaded_img
 
 def apply_level(level):
     global GROUND_Y, GROUND_START_X, GROUND_END_X, platforms, goal_rect, spawn_point, level_enemy_configs
@@ -614,12 +624,15 @@ level_transition_next_idx = None
 # === Etat du jeu ===
 game_state = "MENU"  # MENU, PLAYING, PAUSED
 fword_timer = 0.0
+movement = 'perso.png'
 
 # === Boucle principale ===
 running = True
 dt = 0
+cnt = 0
 
 while running:
+    cnt += 1
     # Boutons du menu (recalculés à chaque frame pour simplicité)
     play_rect = pygame.Rect(SCREEN_WIDTH//2 - 150, SCREEN_HEIGHT//2 + 40, 300, 70)
     quit_rect = pygame.Rect(SCREEN_WIDTH//2 - 150, SCREEN_HEIGHT//2 + 130, 300, 70)
@@ -631,9 +644,11 @@ while running:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
+            break
         elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
             if game_state == "MENU":
                 running = False
+                break
             elif game_state == "PLAYING":
                 # Ouvrir le menu pause
                 game_state = "PAUSED"
@@ -649,12 +664,13 @@ while running:
                 continue
             if game_state == "MENU":
                 if play_rect.collidepoint(event.pos):
-                    # Reset et démarrage du jeu
+                    # Reset du jeu
                     score = 0
                     lives = 3
                     invuln_timer = 0.0
                     is_invulnerable = False
                     victory = False
+                    flip = False
                     level_transition_active = False
                     level_transition_phase = "fade_out"
                     level_transition_timer = 0.0
@@ -662,7 +678,7 @@ while running:
                     # Appliquer le niveau sélectionné au démarrage
                     apply_level(levels[selected_level_idx])
                     instantiate_level_enemies()
-                    player_pos = spawn_point.copy()
+                    player_pos = spawn_point
                     player_vel_y = 0
                     projectiles = []
                     particles = []
@@ -676,34 +692,36 @@ while running:
                     dash_timer = 0.0
                     dash_direction = 1
                     game_state = "PLAYING"
-                    start_tutorial_display()
+                    start_tutorial()
                 elif quit_rect.collidepoint(event.pos):
                     running = False
+                    break
             elif game_state == "PAUSED":
                 if pause_resume_rect.collidepoint(event.pos):
                     game_state = "PLAYING"
-                    start_tutorial_display()
+                    start_tutorial()
                 elif pause_menu_rect.collidepoint(event.pos):
                     game_state = "MENU"
-                    hide_tutorial_display()
+                    hide_tutorial()
                 elif pause_quit_rect.collidepoint(event.pos):
                     running = False
+                    break
             elif game_state == "PLAYING":
                 # Tir vers la souris
                 mouse_world_x = event.pos[0] + camera_offset.x
                 mouse_world_y = event.pos[1] + camera_offset.y
-                
+
                 dx = mouse_world_x - player_pos.x
                 dy = mouse_world_y - player_pos.y
                 distance = math.sqrt(dx**2 + dy**2)
-                
+
                 if distance > 0:
                     dir_x = dx / distance
                     dir_y = dy / distance
-                    
+
                     proj_x = player_pos.x + dir_x * (head_radius + 10)
                     proj_y = player_pos.y + dir_y * (head_radius + 10)
-                    
+
                     projectiles.append({
                         "pos": pygame.Vector2(proj_x, proj_y),
                         "vel": pygame.Vector2(dir_x * PROJECTILE_SPEED, dir_y * PROJECTILE_SPEED)
@@ -731,7 +749,7 @@ while running:
                 # Appliquer le niveau sélectionné au démarrage
                 apply_level(levels[selected_level_idx])
                 instantiate_level_enemies()
-                player_pos = spawn_point.copy()
+                player_pos = spawn_point
                 player_vel_y = 0
                 game_state = "PLAYING"
                 projectiles = []
@@ -744,7 +762,7 @@ while running:
                 dash_timer = 0.0
                 dash_direction = 1
                 game_state = "PLAYING"
-                start_tutorial_display()
+                start_tutorial()
             elif game_state == "MENU" and event.key in (pygame.K_LEFT, pygame.K_RIGHT):
                 # Changer de niveau sélectionné dans le menu
                 if event.key == pygame.K_LEFT:
@@ -761,8 +779,8 @@ while running:
         draw_parallax_background()
 
         # Titre
-        title_surf = title_font.render("Mon Jeu", True, (255, 255, 255))
-        screen.blit(title_surf, (SCREEN_WIDTH//2 - title_surf.get_width()//2, SCREEN_HEIGHT//2 - 120))
+        title_surf = title_font.render("Steel Reborn", True, (255, 255, 255))
+        screen.blit(title_surf, (SCREEN_WIDTH//2 - title_surf.get_width()//2, SCREEN_HEIGHT//2 - 140))
 
         # Boutons
         mouse_pos = pygame.mouse.get_pos()
@@ -830,14 +848,16 @@ while running:
     moving = False
     if keys[pygame.K_q] or keys[pygame.K_LEFT]:
         player_pos.x -= MOVE_SPEED * dt
+        flip = True
         direction = -1
         moving = True
     if keys[pygame.K_d] or keys[pygame.K_RIGHT]:
         player_pos.x += MOVE_SPEED * dt
+        flip = False
         direction = 1
         moving = True
     if moving:
-        walk_cycle += 10 * dt
+        walk_cycle = 10 * dt
     else:
         walk_cycle = 0
 
@@ -900,7 +920,7 @@ while running:
         player_pos.y = GROUND_Y - (head_radius + body_height + leg_height)
         player_vel_y = 0
 
-    player_rect = pygame.Rect(int(player_pos.x - head_radius), int(player_pos.y - head_radius), 
+    player_rect = pygame.Rect(int(player_pos.x - head_radius), int(player_pos.y - head_radius),
                               head_radius*2, head_radius*2 + body_height + leg_height)
     if player_vel_y >= 0:
         for plat in platforms:
@@ -933,7 +953,7 @@ while running:
         create_particles((feet_x, feet_y), (180, 180, 180), 10)
     prev_on_ground = on_ground
 
-    blink_timer -= dt
+    blink_timer = 0.0-dt
     if blink_timer <= 0 and blink_close <= 0:
         blink_close = 0.12
         blink_timer = random.uniform(2.0, 5.0)
@@ -946,7 +966,7 @@ while running:
         lives -= 1
         is_invulnerable = True
         invuln_timer = invuln_time
-        player_pos = spawn_point.copy()
+        player_pos = spawn_point
         player_vel_y = 0
         create_particles(player_pos, (255, 100, 100), 15)
 
@@ -961,7 +981,9 @@ while running:
         proj["pos"] += proj["vel"] * dt
         if (proj["pos"].x < camera_offset.x - 200 or proj["pos"].x > camera_offset.x + SCREEN_WIDTH + 200 or
             proj["pos"].y < camera_offset.y - 200 or proj["pos"].y > camera_offset.y + SCREEN_HEIGHT + 200):
+            pygame
             projectiles.remove(proj)
+
 
     # Collision projectile-monstre
     for proj in projectiles[:]:
@@ -969,18 +991,18 @@ while running:
             if proj["pos"].distance_to(monster["pos"]) < projectile_radius + monster["radius"]:
                 monster["hp"] -= 1
                 monster["hit_flash"] = 0.2
-                
+
                 if monster["hp"] <= 0:
                     create_particles(monster["pos"], (255, 50, 50), 12)
                     monsters.remove(monster)
                     score += 2 if monster["type"] == "tank" else 1
-                
+
                 if proj in projectiles:
                     projectiles.remove(proj)
                 break
 
     # Spawn avec cooldown
-    monster_spawn_timer -= dt
+    monster_spawn_timer = 0-dt
     if monster_spawn_timer <= 0:
         spawned = False
         if level_enemy_configs:
@@ -1049,7 +1071,7 @@ while running:
                 lives -= 1
                 is_invulnerable = True
                 invuln_timer = invuln_time
-                player_pos = spawn_point.copy()
+                player_pos = spawn_point
                 player_vel_y = 0
                 create_particles(player_pos, (255, 255, 100), 15)
                 break
@@ -1071,7 +1093,7 @@ while running:
     if (not victory and not level_transition_active and
         pygame.Rect(int(player_pos.x - head_radius), int(player_pos.y - head_radius),
                     head_radius*2, head_radius*2).colliderect(goal_rect)):
-        hide_tutorial_display()
+        hide_tutorial()
         if selected_level_idx < len(levels) - 1:
             level_transition_active = True
             level_transition_phase = "fade_out"
@@ -1096,7 +1118,7 @@ while running:
     pygame.draw.rect(screen, GROUND_COLOR, ground_rect)
     pygame.draw.rect(screen, (25, 100, 25), ground_rect, 3)
     for i in range(0, 3000, 50):
-        pygame.draw.line(screen, (44, 160, 44), 
+        pygame.draw.line(screen, (44, 160, 44),
                         (i - camera_offset.x, GROUND_Y - camera_offset.y),
                         (i - camera_offset.x, GROUND_Y - camera_offset.y + 100), 2)
 
@@ -1105,7 +1127,7 @@ while running:
         plat_rect_screen = plat.move(-camera_offset.x, -camera_offset.y)
         pygame.draw.rect(screen, PLATFORM_COLOR, plat_rect_screen)
         pygame.draw.rect(screen, PLATFORM_HIGHLIGHT, plat_rect_screen, 3)
-        pygame.draw.line(screen, (80, 50, 20), 
+        pygame.draw.line(screen, (80, 50, 20),
                         (plat_rect_screen.left, plat_rect_screen.top + 5),
                         (plat_rect_screen.right, plat_rect_screen.top + 5), 2)
 
@@ -1113,7 +1135,7 @@ while running:
     goal_rect_screen = goal_rect.move(-camera_offset.x, -camera_offset.y)
     pygame.draw.rect(screen, DOOR_COLOR, goal_rect_screen)
     pygame.draw.rect(screen, DOOR_FRAME, goal_rect_screen, 5)
-    pygame.draw.line(screen, (100, 70, 20), 
+    pygame.draw.line(screen, (100, 70, 20),
                     (goal_rect_screen.centerx, goal_rect_screen.top),
                     (goal_rect_screen.centerx, goal_rect_screen.bottom), 3)
     knob_pos = (goal_rect_screen.right - 12, goal_rect_screen.centery)
@@ -1133,83 +1155,28 @@ while running:
     render_center = (p_center_screen[0], p_center_screen[1] + int(bob))
 
     if not is_invulnerable or int(invuln_timer * 10) % 2 == 0:
-        # Tête avec contour
-        pygame.draw.circle(screen, skin_color, render_center, head_radius)
-        pygame.draw.circle(screen, (0, 0, 0), render_center, head_radius, 3)
-        
-        # Visage
-        eye_offset = 7
-        eye_pos = (render_center[0] - eye_offset * direction, render_center[1] - 5)
-        if blink_close > 0:
-            pygame.draw.line(screen, (0, 0, 0), (int(eye_pos[0]-3), int(eye_pos[1])), (int(eye_pos[0]+3), int(eye_pos[1])), 2)
+        if moving:
+            if cnt < 5:
+                movement = 'perso.png'
+            elif cnt < 9:
+                movement = 'perso2.png'
+            elif cnt < 13:
+                movement = 'perso3.png'
+            elif cnt < 17:
+                movement = 'perso4.png'
+            elif cnt > 19:
+                cnt = 0
         else:
-            pygame.draw.circle(screen, (0, 0, 0), (int(eye_pos[0]), int(eye_pos[1])), 3)
-        pygame.draw.arc(screen, (0, 0, 0), 
-                       (render_center[0] - head_radius, render_center[1] - head_radius, 
-                        head_radius*2, head_radius*2), 3.8, 5.0, 3)
+            movement = 'perso.png'
+        # Chargement et définition les coordonnées de départ pour l'image
+        image = load_image(movement)
+        image = pygame.transform.scale(image, (image.get_width()*2, image.get_height()*2))
+        if direction == -1:
+            image = pygame.transform.flip(image, True, False)
+        image_rect = pygame.Rect(p_center_screen[0]-image.get_width()/2, p_center_screen[1]+image.get_height()/2, -40, -40)
 
-        # Cou + Torse (rectangle arrondi comme un t-shirt)
-        neck_width = 10
-        neck_height = 6
-        neck_rect = pygame.Rect(render_center[0] - neck_width//2, render_center[1] + head_radius - 2, neck_width, neck_height)
-        pygame.draw.rect(screen, HAND_COLOR, neck_rect, border_radius=3)
-
-        torso_width = 26
-        tilt = direction * (2 if moving_now else 0)
-        torso_rect = pygame.Rect(0, 0, torso_width, body_height)
-        torso_rect.centerx = render_center[0] + int(tilt)
-        torso_rect.top = render_center[1] + head_radius
-        pygame.draw.rect(screen, SHIRT_COLOR, torso_rect, border_radius=6)
-        pygame.draw.rect(screen, (0, 0, 0), torso_rect, 2, border_radius=6)
-        body_start = (torso_rect.centerx, torso_rect.top)
-        body_end = (torso_rect.centerx, torso_rect.bottom)
-
-        # Bras (recul au tir et pose en l'air) plus épais avec mains
-        base_arm_y = render_center[1] + head_radius + 16
-        arm_y = base_arm_y - (6 if not on_ground else 0)
-        arm_angle = math.sin(walk_cycle * 10) * 15
-        arm_offset = arm_length * math.cos(math.radians(arm_angle))
-        if shoot_recoil > 0:
-            recoil_factor = 1.0 - min(1.0, shoot_recoil / 0.12) * 0.6
-            arm_offset *= recoil_factor
-            arm_y -= 2
-        if not on_ground:
-            arm_offset *= 0.6
-        left_hand = (int(render_center[0] - arm_offset), int(arm_y))
-        right_hand = (int(render_center[0] + arm_offset), int(arm_y))
-        pygame.draw.line(screen, (0, 0, 0), (left_hand[0], arm_y), (right_hand[0], arm_y), 6)
-        pygame.draw.circle(screen, HAND_COLOR, left_hand, 4)
-        pygame.draw.circle(screen, HAND_COLOR, right_hand, 4)
-
-        # Pistolet dans la main avant, orienté vers la souris
-        mouse_x, mouse_y = pygame.mouse.get_pos()
-        mouse_world = pygame.Vector2(mouse_x + camera_offset.x, mouse_y + camera_offset.y)
-        aim_vec = (mouse_world - pygame.Vector2(player_pos.x, player_pos.y))
-        if aim_vec.length_squared() == 0:
-            aim_dir = pygame.Vector2(direction, 0)
-        else:
-            aim_dir = aim_vec.normalize()
-        # Choisir la main avant selon l'orientation de visée
-        front_hand = right_hand if aim_dir.x >= 0 else left_hand
-        # Paramètres visuels du pistolet
-        grip_len, body_len, barrel_len = 8, 12, 10
-        thickness = 5
-        # Points du pistolet
-        base = pygame.Vector2(front_hand)
-        perp = pygame.Vector2(-aim_dir.y, aim_dir.x)
-        grip_end = base - perp * 4 + aim_dir * 2
-        body_end = base + aim_dir * body_len
-        barrel_end = body_end + aim_dir * barrel_len
-        # Dessin
-        pygame.draw.line(screen, (20, 20, 20), base, grip_end, thickness)  # poignée
-        pygame.draw.line(screen, (30, 30, 30), base, body_end, thickness)  # corps
-        pygame.draw.line(screen, (80, 80, 80), body_end, barrel_end, 3)    # canon
-
-        # (Jambes retirées)
-
-        # Cheveux simples
-        hair_rect = pygame.Rect(render_center[0] - head_radius + 4, render_center[1] - head_radius + 2, head_radius*2 - 8, head_radius)
-        pygame.draw.arc(screen, HAIR_COLOR, hair_rect, math.radians(200), math.radians(340), 4)
+        # Dessiner l'image
+        screen.blit(image, image_rect)
 
     # Projectiles avec traînée
     for proj in projectiles:
@@ -1220,10 +1187,10 @@ while running:
 
     # Monstres (types: tank, fast, flyer)
     for monster in monsters:
-        monster_screen = (int(monster["pos"].x - camera_offset.x), 
+        monster_screen = (int(monster["pos"].x - camera_offset.x),
                          int(monster["pos"].y - camera_offset.y))
         r = monster["radius"]
-        
+
         # Couleur selon flash
         base_colors = {
             "tank": (200, 40, 40),
@@ -1233,45 +1200,34 @@ while running:
         monster_color = (255, 220, 220) if monster["hit_flash"] > 0 else base_colors.get(monster["type"], (220, 20, 20))
 
         if monster["type"] == "tank":
-            # Corps plus gros + contour
-            pygame.draw.circle(screen, monster_color, monster_screen, r)
-            pygame.draw.circle(screen, (0, 0, 0), monster_screen, r, 3)
-            # Sac à dos / blindage
-            backpack_x = monster_screen[0] - 18
-            backpack_y = monster_screen[1]
-            backpack_rect = pygame.Rect(backpack_x - 12, backpack_y - 18, 24, 36)
-            pygame.draw.rect(screen, (60, 40, 20), backpack_rect)
-            pygame.draw.rect(screen, (0, 0, 0), backpack_rect, 2)
-            pygame.draw.circle(screen, (100, 80, 50), (backpack_x, backpack_y - 6), 5)
-            # Yeux
-            pygame.draw.circle(screen, (255, 255, 0), (monster_screen[0] - 9, monster_screen[1] - 6), 4)
-            pygame.draw.circle(screen, (255, 255, 0), (monster_screen[0] + 9, monster_screen[1] - 6), 4)
-            pygame.draw.circle(screen, (0, 0, 0), (monster_screen[0] - 9, monster_screen[1] - 6), 2)
-            pygame.draw.circle(screen, (0, 0, 0), (monster_screen[0] + 9, monster_screen[1] - 6), 2)
+            image = load_image('monster1.webp')
+            if monster["dir"] == -1:
+                image = pygame.transform.flip(image, True, False)
+            image = pygame.transform.scale(image, (image.get_width()*3, image.get_height()*3))
+            image_rect = pygame.Rect(monster_screen[0]-image.get_width()/3, monster_screen[1]-image.get_height()/3, 40, 40)
+
+
+            # Dessiner l'image
+            screen.blit(image, image_rect)
         elif monster["type"] == "fast":
-            # Petit rapide
-            pygame.draw.circle(screen, monster_color, monster_screen, r)
-            pygame.draw.circle(screen, (0, 0, 0), monster_screen, r, 3)
-            # Yeux plus rapprochés
-            pygame.draw.circle(screen, (0, 0, 0), (monster_screen[0] - 6, monster_screen[1] - 4), 3)
-            pygame.draw.circle(screen, (0, 0, 0), (monster_screen[0] + 6, monster_screen[1] - 4), 3)
-            # Traînée légère
-            pygame.draw.circle(screen, (255, 200, 120), (monster_screen[0] - monster["dir"]*r, monster_screen[1]), max(1, r//4))
+            image = load_image('monster2.webp')
+            if monster["dir"] == -1:
+                image = pygame.transform.flip(image, True, False)
+            image = pygame.transform.scale(image, (image.get_width()*2, image.get_height()*2))
+            image_rect = pygame.Rect(monster_screen[0]-image.get_width()/2, monster_screen[1]-image.get_height()/2, 40, 40)
+
+
+            # Dessiner l'image
+            screen.blit(image, image_rect)
         else:  # flyer
-            # Corps volant avec ailes
-            pygame.draw.circle(screen, monster_color, monster_screen, r)
-            pygame.draw.circle(screen, (0, 0, 0), monster_screen, r, 3)
-            wing_span = r + 10
-            left_wing = [(monster_screen[0] - 2, monster_screen[1]),
-                         (monster_screen[0] - wing_span, monster_screen[1] - 6),
-                         (monster_screen[0] - wing_span + 6, monster_screen[1] + 6)]
-            right_wing = [(monster_screen[0] + 2, monster_screen[1]),
-                          (monster_screen[0] + wing_span, monster_screen[1] - 6),
-                          (monster_screen[0] + wing_span - 6, monster_screen[1] + 6)]
-            pygame.draw.polygon(screen, (180, 210, 255), left_wing)
-            pygame.draw.polygon(screen, (180, 210, 255), right_wing)
-            pygame.draw.polygon(screen, (0, 0, 0), left_wing, 2)
-            pygame.draw.polygon(screen, (0, 0, 0), right_wing, 2)
+            image = load_image('monster3.png')
+            if monster["dir"] == 1:
+                image = pygame.transform.flip(image, True, False)
+            image = pygame.transform.scale(image, (image.get_width()*2, image.get_height()*2))
+            image_rect = pygame.Rect(monster_screen[0]-image.get_width()/2, monster_screen[1]-image.get_height()/2, 40, 40)
+
+            # Dessiner l'image
+            screen.blit(image, image_rect)
 
     # Particules
     for part in particles:
@@ -1289,7 +1245,7 @@ while running:
 
     score_text = font.render(f"Score: {score}", True, (255, 255, 255))
     screen.blit(score_text, (30, 25))
-    
+
     # Vies avec cœurs
     lives_text = font.render("Vies:", True, (255, 255, 255))
     screen.blit(lives_text, (30, 70))
@@ -1297,10 +1253,10 @@ while running:
         heart_x = 130 + i * 35
         pygame.draw.circle(screen, (255, 50, 50), (heart_x - 5, 85), 10)
         pygame.draw.circle(screen, (255, 50, 50), (heart_x + 5, 85), 10)
-        pygame.draw.polygon(screen, (255, 50, 50), 
+        pygame.draw.polygon(screen, (255, 50, 50),
                            [(heart_x - 15, 85), (heart_x, 100), (heart_x + 15, 85)])
 
-    stamina_label = small_font.render("Stamina", True, (180, 200, 255))
+    stamina_label = small_font.render("Endurance", True, (180, 200, 255))
     screen.blit(stamina_label, (30, 120))
     stamina_bar_bg = pygame.Rect(30, 150, 240, 20)
     pygame.draw.rect(screen, (40, 40, 40), stamina_bar_bg, border_radius=6)
@@ -1317,7 +1273,7 @@ while running:
 
     # Indicateur de cooldown spawn
     if monster_spawn_timer > 0:
-        cooldown_text = small_font.render(f"Prochain spawn: {monster_spawn_timer:.1f}s", 
+        cooldown_text = small_font.render(f"Prochain spawn: {monster_spawn_timer:.1f}s",
                                          True, (200, 200, 200))
         screen.blit(cooldown_text, (SCREEN_WIDTH - 350, 30))
 
@@ -1333,7 +1289,7 @@ while running:
                 selected_level_idx = level_transition_next_idx
                 apply_level(levels[selected_level_idx])
                 instantiate_level_enemies()
-                player_pos = spawn_point.copy()
+                player_pos = spawn_point
                 player_vel_y = 0
                 projectiles = []
                 particles = []
@@ -1352,7 +1308,7 @@ while running:
                 invuln_timer = 0.0
                 camera_offset.x = player_pos.x - SCREEN_WIDTH // 2
                 camera_offset.y = player_pos.y - SCREEN_HEIGHT // 2
-                start_tutorial_display()
+                start_tutorial
                 level_transition_phase = "fade_in"
                 level_transition_timer = 0.0
                 overlay_alpha = 255
@@ -1377,11 +1333,11 @@ while running:
         overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
         overlay.fill((0, 0, 0, 180))
         screen.blit(overlay, (0, 0))
-        
+
         big_text = pygame.font.SysFont(None, 120).render("VICTOIRE !", True, (255, 215, 0))
         sub_text = font.render("Félicitations !", True, (255, 255, 255))
         score_final = font.render(f"Score Final: {score}", True, (255, 255, 255))
-        
+
         screen.blit(big_text, (SCREEN_WIDTH//2 - big_text.get_width()//2, SCREEN_HEIGHT//2 - 100))
         screen.blit(sub_text, (SCREEN_WIDTH//2 - sub_text.get_width()//2, SCREEN_HEIGHT//2 + 20))
         screen.blit(score_final, (SCREEN_WIDTH//2 - score_final.get_width()//2, SCREEN_HEIGHT//2 + 70))
@@ -1399,10 +1355,10 @@ while running:
         overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
         overlay.fill((0, 0, 0, 200))
         screen.blit(overlay, (0, 0))
-        
+
         over_text = pygame.font.SysFont(None, 96).render("GAME OVER", True, (255, 50, 50))
         score_final = font.render(f"Score: {score}", True, (255, 255, 255))
-        
+
         screen.blit(over_text, (SCREEN_WIDTH//2 - over_text.get_width()//2, SCREEN_HEIGHT//2 - 60))
         screen.blit(score_final, (SCREEN_WIDTH//2 - score_final.get_width()//2, SCREEN_HEIGHT//2 + 20))
         pygame.display.flip()

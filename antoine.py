@@ -252,11 +252,11 @@ GRAVITY = 800
 JUMP_FORCE = -600
 MOVE_SPEED = 300
 PROJECTILE_SPEED = 800
-STAMINA_MAX = 100
+STAMINA_MAX = 300
 STAMINA_JUMP_COST = 10
-STAMINA_REGEN_DELAY = 4.0
+STAMINA_REGEN_DELAY = 3.0
 STAMINA_REGEN_INTERVAL = 0.5
-STAMINA_REGEN_AMOUNT = 5
+STAMINA_REGEN_AMOUNT = 7
 DOUBLE_JUMP_COST = 15
 DASH_COST = 10
 DASH_SPEED = 900
@@ -1185,7 +1185,7 @@ while running:
         # (Jambes retirées)
 
         # Cheveux simples
-        hair_rect = pygame.Rect(render_center[0] - head_radius + 4, render_center[1] - head_radius + 2, head_radius*2 - 8, head_radius)
+        hair_rect = pygame.Rect(render_center[0] - head_radius + 6, render_center[1] - head_radius + 4, head_radius*2 - 10, head_radius)
         pygame.draw.arc(screen, HAIR_COLOR, hair_rect, math.radians(200), math.radians(340), 4)
 
     # Projectiles avec traînée

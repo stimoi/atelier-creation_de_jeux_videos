@@ -1,5 +1,5 @@
 # Point d'entrée principal du jeu
-import pygame
+import pygame # truc de base
 import sys
 import os
 

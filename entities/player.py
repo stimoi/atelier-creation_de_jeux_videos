@@ -51,9 +51,9 @@ class Player:
         # Saut
         space_pressed = keys[pygame.K_SPACE]
         if space_pressed and not self.jump_was_pressed:
-            if self.on_ground and self.stamina >= STAMINA_JUMP_COST:
+            if self.on_ground and self.stamina >= 0:
                 self.vel_y = JUMP_FORCE
-                self.stamina = max(0, self.stamina - STAMINA_JUMP_COST)
+                self.stamina = max(0, self.stamina - 0)
                 self.stamina_idle_timer = 0.0
                 self.stamina_regen_timer = 0.0
                 self.air_jumps_left = 1

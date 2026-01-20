@@ -119,52 +119,66 @@ class Game:
         self.tutorial_system.select_tutorial_for_level(level)
     
     def _handle_events(self):
-        """Gère les événements"""
+        """Gère tous les événements pygame (clavier, souris, fenêtre)
+        
+        Logique complexe de gestion d'états:
+        - Menu principal: navigation entre niveaux, démarrage jeu
+        - Jeu en cours: tir, pause, interactions
+        - Menu pause: reprise, retour menu, quitter
+        - Easter eggs et fonctionnalités spéciales
+        
+        Les événements sont routés selon l'état actuel du jeu
+        """
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
             
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
+                    # Logique de navigation entre états avec ESC
                     if self.game_state.is_menu():
-                        self.running = False
+                        self.running = False  # Menu -> Quitter
                     elif self.game_state.is_playing():
-                        self.game_state.set_state(GAME_STATES["PAUSED"])
+                        self.game_state.set_state(GAME_STATES["PAUSED"])  # Jeu -> Pause
                     elif self.game_state.is_paused():
-                        self.game_state.set_state(GAME_STATES["PLAYING"])
+                        self.game_state.set_state(GAME_STATES["PLAYING"])  # Pause -> Jeu
                 
                 elif event.key == pygame.K_o:
-                    # Easter egg
+                    # Easter egg: affiche "BRAVO!" pendant 1.5 secondes
                     self.game_state.fword_timer = 1.5
                 
                 elif event.key == pygame.K_RETURN or event.key == pygame.K_SPACE:
+                    # Validation/Action dans les menus
                     if self.game_state.is_menu():
-                        self._start_new_game()
+                        self._start_new_game()  # Menu -> Nouveau jeu
                     elif self.game_state.is_paused():
-                        self.game_state.set_state(GAME_STATES["PLAYING"])
-                        self.tutorial_system.start_display()
+                        self.game_state.set_state(GAME_STATES["PLAYING"])  # Pause -> Jeu
+                        self.tutorial_system.start_display()  # Réaffiche le tutoriel
                 
                 elif event.key == pygame.K_m and self.game_state.is_paused():
+                    # Retour au menu depuis la pause
                     self.game_state.set_state(GAME_STATES["MENU"])
-                    self.tutorial_system.hide_display()
+                    self.tutorial_system.hide_display()  # Cache le tutoriel
                 
                 elif self.game_state.is_menu():
+                    # Navigation entre niveaux dans le menu
                     if event.key == pygame.K_LEFT:
                         self.selected_level_idx = (self.selected_level_idx - 1) % len(self.levels)
-                        self._apply_current_level()
+                        self._apply_current_level()  # Recharge le niveau sélectionné
                     elif event.key == pygame.K_RIGHT:
                         self.selected_level_idx = (self.selected_level_idx + 1) % len(self.levels)
-                        self._apply_current_level()
+                        self._apply_current_level()  # Recharge le niveau sélectionné
             
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 mouse_pos = pygame.mouse.get_pos()
                 
-                # Tutoriel
+                # Gestion des clics sur le tutoriel (bouton "Suivant")
                 if self.tutorial_system.visible and self.tutorial_system.button_rect and self.tutorial_system.button_rect.collidepoint(mouse_pos):
                     self.tutorial_system.advance_text()
-                    continue
+                    continue  # Évite les autres traitements de clic
                 
                 if self.game_state.is_menu():
+                    # Clics sur les boutons du menu principal
                     play_rect, quit_rect = self.ui_manager.draw_menu(self.screen, self.font, self.small_font, self.title_font, self.selected_level_idx, self.levels)
                     if play_rect.collidepoint(mouse_pos):
                         self._start_new_game()
@@ -172,6 +186,7 @@ class Game:
                         self.running = False
                 
                 elif self.game_state.is_paused():
+                    # Clics sur les boutons du menu pause
                     pause_resume_rect, pause_menu_rect, pause_quit_rect = self.ui_manager.draw_pause_menu(self.screen, self.font, self.small_font, self.title_font)
                     if pause_resume_rect.collidepoint(mouse_pos):
                         self.game_state.set_state(GAME_STATES["PLAYING"])
@@ -183,11 +198,12 @@ class Game:
                         self.running = False
                 
                 elif self.game_state.is_playing():
-                    # Tir
+                    # Tir: convertit la position souris écran -> monde et crée un projectile
                     mouse_world = self.camera.screen_to_world(mouse_pos)
                     projectile = self.player.shoot(mouse_world)
                     if projectile:
                         self.projectile_system.add_projectile(projectile)
+                        # Crée des particules d'impact à la position de tir
                         self.particle_system.create_particles(projectile["pos"], PARTICLE_COLORS["impact"], 6)
     
     def _start_new_game(self):
@@ -244,18 +260,26 @@ class Game:
             next_idx = (self.selected_level_idx + 1) % len(self.levels)
             self.game_state.start_level_transition(next_idx)
         
-        # Gestion de la transition de niveau
+        # Gestion complexe de la transition entre niveaux
+        # Système à plusieurs phases pour une transition fluide
         should_change_level = self.game_state.update_level_transition(self.dt)
         if should_change_level:
+            # Phase 1: Préparation du changement de niveau
             self.selected_level_idx = self.game_state.level_transition_next_idx
-            self._apply_current_level()
-            self.player.reset(self.spawn_point)
-            self.projectile_system.clear()
-            self.particle_system.clear()
-            self.enemy_system.instantiate_level_enemies()
+            self._apply_current_level()  # Charge les nouvelles données de niveau
+            
+            # Phase 2: Réinitialisation complète des entités
+            self.player.reset(self.spawn_point)  # Replace le joueur au spawn
+            self.projectile_system.clear()  # Nettoie tous les projectiles
+            self.particle_system.clear()  # Nettoie toutes les particules
+            self.enemy_system.instantiate_level_enemies()  # Crée les ennemis du nouveau niveau
+            
+            # Phase 3: Ajustement de la caméra pour éviter un saut visuel
             self.camera.set_position(self.player.pos.x - SCREEN_WIDTH // 2, self.player.pos.y - SCREEN_HEIGHT // 2)
+            
+            # Phase 4: Finalisation et réinitialisation du tutoriel
             self.game_state.complete_level_transition()
-            self.tutorial_system.start_display()
+            self.tutorial_system.start_display()  # Affiche le tutoriel du nouveau niveau
         
         # Mise à jour de la caméra
         self.camera.update(self.player.pos)
@@ -282,10 +306,14 @@ class Game:
         # Mise à jour des particules
         self.particle_system.update(self.dt)
         
-        # Effet de particules quand on atterrit
+        # Effet de particules lors de l'atterrissage pour le feedback visuel
+        # Détecte le moment exact où le joueur touche le sol après être en l'air
         if not self.player.prev_on_ground and self.player.on_ground and self.player.vel_y == 0:
+            # Position des particules: pieds du joueur
             feet_x = self.player.pos.x
+            # Détermine si on atterrit sur le sol ou une plateforme
             feet_y = self.ground_y if self.player.pos.y + head_radius + body_height + leg_height >= self.ground_y else self.player.pos.y + head_radius + body_height + leg_height
+            # Crée un petit nuage de particules à l'impact
             self.particle_system.create_particles((feet_x, feet_y), PARTICLE_COLORS["landing"], 10)
         
         self.player.prev_on_ground = self.player.on_ground

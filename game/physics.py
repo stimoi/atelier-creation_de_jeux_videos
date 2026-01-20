@@ -34,7 +34,8 @@ def resolve_block_collision(player_rect, player_pos, player_vel_y, block_rect, h
     # Si le joueur saute et touche un bloc par le dessous
     elif player_vel_y < 0 and player_rect.top < block_rect.bottom and player_rect.centery > block_rect.bottom:
         new_pos.y = block_rect.bottom + head_radius + 1
-        new_vel_y = 0
+        new_vel_y = 0 
+        # ajouter une fonction qui permet de remettre le jump a 0
     # Si le joueur se déplace horizontalement et touche un bloc
     else:
         if player_rect.right > block_rect.left and player_rect.left < block_rect.left:

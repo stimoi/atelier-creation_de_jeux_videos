@@ -73,7 +73,7 @@ def load_levels():
     """
     levels = []
     levels_dir = os.path.dirname(__file__)
-    level_filenames = ["level.json", "levels.json"]  # Support ancien et nouveau nommage
+    level_filenames = ["levels (1).json", "level.json", "levels.json"]  # Prioritize levels (1).json for music support
     
     for name in level_filenames:
         level_path = os.path.join(levels_dir, "..", name)
@@ -180,5 +180,20 @@ def apply_level(level, game_state):
                 # deepcopy crée une copie indépendante de chaque configuration
                 level_enemy_configs.append(deepcopy(entry))
     game_state["level_enemy_configs"] = level_enemy_configs
+    
+    # Configuration de la musique
+    level_music = []
+    raw_music = level.get("music", [])
+    if isinstance(raw_music, list):
+        for entry in raw_music:
+            if isinstance(entry, dict):
+                # Extrait les informations de musique (nom, type, données base64)
+                music_info = {
+                    "name": entry.get("name", ""),
+                    "type": entry.get("type", ""),
+                    "data": entry.get("data", "")
+                }
+                level_music.append(music_info)
+    game_state["level_music"] = level_music
     
     return game_state

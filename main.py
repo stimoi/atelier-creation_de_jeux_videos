@@ -10,6 +10,7 @@ from config.colors import *
 # Import des modules core
 from core.chargeur_niveau import load_levels, apply_level
 from core.tutoriel import TutorialSystem
+from core.music_system import MusicSystem
 
 # Import des entités
 from entities.player import Player
@@ -53,6 +54,7 @@ class Game:
         self.background_system = BackgroundSystem()
         self.entities_renderer = EntitiesRenderer()
         self.tutorial_system = TutorialSystem()
+        self.music_system = MusicSystem()
         
         # Systèmes d'entités
         self.particle_system = ParticleSystem()
@@ -104,12 +106,26 @@ class Game:
         self.ground_y = game_state_data["GROUND_Y"]
         self.ground_start_x = game_state_data["GROUND_START_X"]
         self.ground_end_x = game_state_data["GROUND_END_X"]
+        
+        # Fix ground if it has no width (end_x <= start_x)
+        if self.ground_end_x <= self.ground_start_x:
+            self.ground_end_x = 10000  # Give it a reasonable width
         self.platforms = game_state_data["platforms"]
         self.platform_colors = game_state_data["platform_colors"]
         self.platform_types = game_state_data["platform_types"]
         self.goal_rect = game_state_data["goal_rect"]
         self.spawn_point = game_state_data["spawn_point"]
         self.enemy_system.level_enemy_configs = game_state_data["level_enemy_configs"]
+        
+        # Charger et jouer la musique du niveau
+        level_music = game_state_data.get("level_music", [])
+        if level_music:
+            # Joue la première piste musicale trouvée
+            if self.music_system.load_music_from_data(level_music[0]):
+                self.music_system.play(loops=-1)
+                print(f"Musique chargée: {level_music[0].get('name', 'Inconnue')}")
+        else:
+            self.music_system.stop()
         
         # Créer le joueur
         if self.player is None:
@@ -244,10 +260,14 @@ class Game:
         player_rect = self.player.get_rect()
         block_collision = check_block_collision(player_rect, self.platforms, self.platform_types)
         if block_collision:
+            old_vel_y = self.player.vel_y
             self.player.pos, self.player.vel_y = resolve_block_collision(
                 player_rect, self.player.pos, self.player.vel_y, block_collision,
                 head_radius, body_height, leg_height
             )
+            # Reset jumps when landing on a block (falling and velocity stopped)
+            if old_vel_y > 0 and self.player.vel_y == 0:
+                self.player.air_jumps_left = 1
         
         # Vérifier si le joueur est mort
         if self.player.is_dead(DEATH_BELOW_Y):

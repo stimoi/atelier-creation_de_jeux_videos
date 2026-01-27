@@ -18,7 +18,6 @@ from entities.enemies import EnemySystem
 from entities.projectiles import ProjectileSystem
 from entities.particles import ParticleSystem
 
-# Import des systèmes de rendu
 from rendering.background import BackgroundSystem
 from rendering.entities_renderer import EntitiesRenderer
 from rendering.ui import UIManager
@@ -82,6 +81,14 @@ class Game:
         # Variables de contrôle
         self.running = True
         self.dt = 0
+        
+        # Menu GUI state
+        self.menu_gui_open = False
+        self.input_active = False
+        self.input_text = ""
+        self.power_buttons = []
+        self.power_images = {}
+        self._setup_menu_gui()
     
     def _apply_current_level(self):
         """Applique le niveau actuel"""
@@ -159,6 +166,21 @@ class Game:
                     elif self.game_state.is_paused():
                         self.game_state.set_state(GAME_STATES["PLAYING"])  # Pause -> Jeu
                 
+                elif event.key == pygame.K_TAB:
+                    # Toggle menu GUI
+                    self.menu_gui_open = not self.menu_gui_open
+                    if self.menu_gui_open:
+                        self.input_active = False
+                
+                elif self.menu_gui_open and self.input_active:
+                    # Handle text input for the pseudo field
+                    if event.key == pygame.K_BACKSPACE:
+                        self.input_text = self.input_text[:-1]
+                    elif event.key == pygame.K_RETURN:
+                        self.input_active = False
+                    else:
+                        self.input_text += event.unicode
+                
                 elif event.key == pygame.K_o:
                     # Easter egg: affiche "BRAVO!" pendant 1.5 secondes
                     self.game_state.fword_timer = 1.5
@@ -175,6 +197,7 @@ class Game:
                     # Retour au menu depuis la pause
                     self.game_state.set_state(GAME_STATES["MENU"])
                     self.tutorial_system.hide_display()  # Cache le tutoriel
+                    self.music_system.stop()  # Arrête la musique au menu
                 
                 elif self.game_state.is_menu():
                     # Navigation entre niveaux dans le menu
@@ -187,6 +210,11 @@ class Game:
             
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 mouse_pos = pygame.mouse.get_pos()
+                
+                # Gestion du menu GUI
+                if self.menu_gui_open:
+                    self._handle_menu_gui_click(mouse_pos)
+                    return
                 
                 # Gestion des clics sur le tutoriel (bouton "Suivant")
                 if self.tutorial_system.visible and self.tutorial_system.button_rect and self.tutorial_system.button_rect.collidepoint(mouse_pos):
@@ -210,6 +238,7 @@ class Game:
                     elif pause_menu_rect.collidepoint(mouse_pos):
                         self.game_state.set_state(GAME_STATES["MENU"])
                         self.tutorial_system.hide_display()
+                        self.music_system.stop()  # Arrête la musique au menu
                     elif pause_quit_rect.collidepoint(mouse_pos):
                         self.running = False
                 
@@ -371,6 +400,7 @@ class Game:
                 self.game_state.set_state(GAME_STATES["MENU"])
                 self.game_state.victory = False
                 self.game_state.level_transition_active = False
+                self.music_system.stop()  # Arrête la musique au menu
             
             elif self.game_state.is_game_over():
                 self.ui_manager.draw_game_over_screen(self.screen, self.font, self.game_state.score)
@@ -382,11 +412,16 @@ class Game:
                 self.projectile_system.clear()
                 self.particle_system.clear()
                 self.game_state.level_transition_active = False
+                self.music_system.stop()  # Arrête la musique au menu
         
         # Easter egg
         if self.game_state.fword_timer > 0:
             fword_surf = self.fword_font.render("BRAVO!", True, (255, 0, 0))
             self.screen.blit(fword_surf, (SCREEN_WIDTH//2 - fword_surf.get_width()//2, SCREEN_HEIGHT//2 - fword_surf.get_height()//2))
+        
+        # Menu GUI
+        if self.menu_gui_open:
+            self._draw_menu_gui()
         
         # Tutoriel
         self.tutorial_system.draw(self.screen, self.small_font, SCREEN_WIDTH, SCREEN_HEIGHT)
@@ -429,6 +464,138 @@ class Game:
         
         pygame.quit()
         sys.exit()
+    
+    def _setup_menu_gui(self):
+        """Setup the menu GUI components"""
+        # Menu dimensions
+        self.menu_width = 800
+        self.menu_height = 600
+        self.menu_x = (SCREEN_WIDTH - self.menu_width) // 2
+        self.menu_y = (SCREEN_HEIGHT - self.menu_height) // 2
+        
+        # Input field
+        self.input_rect = pygame.Rect(self.menu_x + 250, self.menu_y + 200, 300, 40)
+        
+        # Setup power buttons
+        self._setup_power_buttons()
+        self._load_power_images()
+    
+    def _setup_power_buttons(self):
+        """Setup the 5 power buttons in a row"""
+        button_radius = 50
+        button_spacing = 120
+        start_x = self.menu_x + (self.menu_width - (5 * button_spacing)) // 2 + button_radius // 2
+        button_y = self.menu_y + 350
+        
+        self.power_buttons = []
+        for i in range(5):
+            x = start_x + i * button_spacing
+            button_rect = pygame.Rect(x - button_radius, button_y - button_radius, 
+                                     button_radius * 2, button_radius * 2)
+            self.power_buttons.append({
+                'rect': button_rect,
+                'label': f'POUWOR {i + 1}',
+                'image_key': f'pouvoir{i + 1}'
+            })
+    
+    def _load_power_images(self):
+        """Load power images if they exist"""
+        for i in range(1, 6):
+            image_path = f'GUI/IMG/pouvoir{i}.png'
+            if os.path.exists(image_path):
+                try:
+                    image = pygame.image.load(image_path)
+                    image = pygame.transform.scale(image, (80, 80))
+                    self.power_images[f'pouvoir{i}'] = image
+                except pygame.error:
+                    print(f"Could not load image: {image_path}")
+    
+    def _handle_menu_gui_click(self, mouse_pos):
+        """Handle clicks in the menu GUI"""
+        # Check if input field was clicked
+        if self.input_rect.collidepoint(mouse_pos):
+            self.input_active = True
+        else:
+            self.input_active = False
+        
+        # Check if power buttons were clicked
+        for button in self.power_buttons:
+            if button['rect'].collidepoint(mouse_pos):
+                print(f"Clicked: {button['label']}")
+    
+    def _draw_menu_gui(self):
+        """Draw the menu GUI"""
+        # Menu GUI colors
+        WHITE = (255, 255, 255)
+        BLACK = (0, 0, 0)
+        GRAY = (200, 200, 200)
+        DARK_GRAY = (100, 100, 100)
+        BLUE = (100, 149, 237)
+        LIGHT_BLUE = (173, 216, 230)
+        
+        # Draw menu background
+        menu_surface = pygame.Surface((self.menu_width, self.menu_height))
+        menu_surface.fill(WHITE)
+        menu_surface.set_alpha(240)
+        self.screen.blit(menu_surface, (self.menu_x, self.menu_y))
+        
+        # Draw menu border
+        pygame.draw.rect(self.screen, BLACK, 
+                        (self.menu_x, self.menu_y, self.menu_width, self.menu_height), 3)
+        
+        # Draw title
+        font_title = pygame.font.Font(None, 36)
+        title_text = font_title.render("INFORMATIONS SUR LE JOUEUR", True, BLACK)
+        title_rect = title_text.get_rect(center=(self.menu_x + self.menu_width // 2, self.menu_y + 60))
+        self.screen.blit(title_text, title_rect)
+        
+        # Draw avatar placeholder
+        avatar_rect = pygame.Rect(self.menu_x + 100, self.menu_y + 120, 120, 120)
+        pygame.draw.rect(self.screen, GRAY, avatar_rect)
+        pygame.draw.rect(self.screen, BLACK, avatar_rect, 2)
+        font_label = pygame.font.Font(None, 24)
+        avatar_text = font_label.render("Avatar", True, DARK_GRAY)
+        avatar_text_rect = avatar_text.get_rect(center=avatar_rect.center)
+        self.screen.blit(avatar_text, avatar_text_rect)
+        
+        # Draw pseudo label
+        pseudo_label = font_label.render("Pseudo:", True, BLACK)
+        self.screen.blit(pseudo_label, (self.menu_x + 100, self.menu_y + 90))
+        
+        # Draw input field
+        color = BLUE if self.input_active else BLACK
+        pygame.draw.rect(self.screen, color, self.input_rect, 2)
+        text_surface = font_label.render(self.input_text, True, BLACK)
+        self.screen.blit(text_surface, (self.input_rect.x + 5, self.input_rect.y + 8))
+        
+        # Draw power buttons
+        for button in self.power_buttons:
+            self._draw_power_button(button, WHITE, BLACK, GRAY, DARK_GRAY, BLUE, LIGHT_BLUE)
+    
+    def _draw_power_button(self, button, WHITE, BLACK, GRAY, DARK_GRAY, BLUE, LIGHT_BLUE):
+        """Draw a single power button"""
+        center = button['rect'].center
+        font_button = pygame.font.Font(None, 20)
+        
+        # Check if image exists
+        if button['image_key'] in self.power_images:
+            # Draw circular background
+            pygame.draw.circle(self.screen, LIGHT_BLUE, center, 45)
+            pygame.draw.circle(self.screen, BLACK, center, 45, 2)
+            
+            # Draw image
+            image = self.power_images[button['image_key']]
+            image_rect = image.get_rect(center=center)
+            self.screen.blit(image, image_rect)
+        else:
+            # Draw circular button with text
+            pygame.draw.circle(self.screen, LIGHT_BLUE, center, 45)
+            pygame.draw.circle(self.screen, BLACK, center, 45, 2)
+            
+            # Draw text
+            text = font_button.render(button['label'], True, BLACK)
+            text_rect = text.get_rect(center=center)
+            self.screen.blit(text, text_rect)
 
 def main():
     """Point d'entrée"""

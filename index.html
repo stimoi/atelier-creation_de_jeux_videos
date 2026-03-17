@@ -779,6 +779,59 @@
       border-color: #667eea;
       background: rgba(102, 126, 234, 0.1);
     }
+
+    /* ===== TEST MODE ===== */
+    #testPlayBtn {
+      background: linear-gradient(145deg, #22c55e, #16a34a);
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 10px;
+      font-weight: 700;
+      font-size: 14px;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(34,197,94,0.4);
+      transition: all 0.2s;
+    }
+    #testPlayBtn:hover { background: linear-gradient(145deg, #16a34a, #15803d); transform: translateY(-2px); }
+    #testStopBtn {
+      background: linear-gradient(145deg, #ef4444, #dc2626);
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 10px;
+      font-weight: 700;
+      font-size: 14px;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(239,68,68,0.4);
+      transition: all 0.2s;
+      display: none;
+    }
+    #testStopBtn:hover { background: linear-gradient(145deg, #dc2626, #b91c1c); transform: translateY(-2px); }
+    #testModeBanner {
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      background: linear-gradient(90deg, rgba(34,197,94,0.92), rgba(21,128,61,0.92));
+      color: white;
+      text-align: center;
+      padding: 6px 0;
+      font-weight: 700;
+      font-size: 13px;
+      letter-spacing: 0.06em;
+      z-index: 30;
+      backdrop-filter: blur(8px);
+      display: none;
+      pointer-events: none;
+    }
+    #testModeBanner.visible { display: block; }
+    body.test-active canvas { cursor: default !important; }
+    body.test-active .sidebar,
+    body.test-active .sidebar input,
+    body.test-active .sidebar select,
+    body.test-active .sidebar button:not(#testStopBtn) {
+      pointer-events: none;
+      opacity: 0.55;
+    }
   </style>
 </head>
 <body>
@@ -924,7 +977,10 @@
         Pas
         <input type="number" id="snapStep" value="10" min="1" style="width:64px;">
       </label>
+      <button id="testPlayBtn" onclick="startTest()" title="Tester le joueur dans le niveau actuel">▶ Tester</button>
+      <button id="testStopBtn" onclick="stopTest()" title="Arrêter le test">■ Stop</button>
     </div>
+    <div id="testModeBanner">🎮 MODE TEST — Q/←: gauche &nbsp;|&nbsp; D/→: droite &nbsp;|&nbsp; ESPACE: sauter / double saut &nbsp;|&nbsp; SHIFT: dash &nbsp;|&nbsp; ESC ou Stop: quitter</div>
     <div class="navigation-help">
       <div><strong>🚀 Navigation Infinie</strong></div>
       <div>• Flèches / WASD: Déplacer la vue</div>
@@ -1068,6 +1124,7 @@
 
     let data = { levels: [ structuredClone(DEFAULT_LEVEL) ] };
     let current = 0;
+    let testMode = false;
 
     const els = {
       levelSelect: document.getElementById('levelSelect'),
@@ -2567,6 +2624,7 @@
     entityEditorEls.close?.addEventListener('click', closeEntityEditor);
 
     els.view.addEventListener('mousedown', (e) => {
+      if (testMode) return;
       hideContextMenu();
       const btn = e.button; // 0: gauche, 1: milieu, 2: droit
       const lvl = data.levels[current];
@@ -2674,6 +2732,7 @@
 
     els.view.addEventListener('contextmenu', (e) => {
       e.preventDefault();
+      if (testMode) return;
       const lvl = data.levels[current];
       const { px, py } = worldFromClient(e);
       const hit = hitTest(lvl, px, py);
@@ -3361,6 +3420,375 @@
         }
       }
     }
+
+    // =====================================================
+    //  MODE TEST — physique identique au jeu Python
+    //  GRAVITY=800, JUMP_FORCE=-600, MOVE_SPEED=300
+    //  DASH_SPEED=900, DASH_DURATION=0.2
+    //  head_radius=20, body_height=40, leg_height=30
+    // =====================================================
+    const TEST = {
+      GRAVITY:        800,
+      JUMP_FORCE:    -600,
+      MOVE_SPEED:     300,
+      DASH_SPEED:     900,
+      DASH_DURATION:  0.2,
+      DASH_COST:       10,
+      DOUBLE_JUMP_COST:15,
+      JUMP_COST:       10,
+      STAMINA_MAX:    100,
+      HEAD_RADIUS:     20,
+      BODY_HEIGHT:     40,
+      LEG_HEIGHT:      30,
+      // dimensions totales du joueur (hitbox verticale)
+      get PLAYER_HEIGHT() { return this.HEAD_RADIUS + this.BODY_HEIGHT + this.LEG_HEIGHT; }
+    };
+
+    let testState = null;
+    let testAnimId = null;
+    let testLastTime = null;
+    const testKeys = {};
+
+    function startTest() {
+      if (testMode) return;
+      testMode = true;
+
+      const lvl = data.levels[current];
+
+      // Calcul du sol réel (world Y du sol du niveau)
+      const groundY = lvl.ground ? lvl.ground.y : 0;
+
+      // Position spawn → feet doivent être sur groundY
+      const spawnX = lvl.spawn ? lvl.spawn.x : 0;
+      const spawnY = lvl.spawn ? lvl.spawn.y : (groundY - TEST.PLAYER_HEIGHT);
+
+      testState = {
+        x: spawnX,
+        y: spawnY,          // centre-haut du joueur (comme player_pos en Python)
+        velY: 0,
+        dir: 1,
+        airJumps: 1,
+        jumpWasPressed: false,
+        dashWasPressed: false,
+        dashTimer: 0,
+        dashDir: 1,
+        stamina: TEST.STAMINA_MAX,
+        walkCycle: 0,
+        groundY: groundY,
+        groundStartX: lvl.ground ? lvl.ground.start_x : -Infinity,
+        groundEndX:   lvl.ground ? lvl.ground.end_x   :  Infinity,
+        platforms: (lvl.platforms || []).filter(p => (p.type || 'platform') !== 'decor')
+      };
+
+      // UI
+      document.getElementById('testPlayBtn').style.display = 'none';
+      document.getElementById('testStopBtn').style.display = '';
+      document.getElementById('testModeBanner').classList.add('visible');
+      document.body.classList.add('test-active');
+
+      // Centrer la vue sur le spawn
+      const canvasW = els.view.clientWidth;
+      const canvasH = els.view.clientHeight;
+      scrollX = canvasW / 2 - spawnX * zoom;
+      scrollY = canvasH / 2 - spawnY * zoom;
+
+      testLastTime = null;
+      testAnimId = requestAnimationFrame(testLoop);
+    }
+
+    function stopTest() {
+      if (!testMode) return;
+      testMode = false;
+      if (testAnimId) { cancelAnimationFrame(testAnimId); testAnimId = null; }
+      testState = null;
+      testLastTime = null;
+      for (const k in testKeys) testKeys[k] = false;
+
+      document.getElementById('testPlayBtn').style.display = '';
+      document.getElementById('testStopBtn').style.display = 'none';
+      document.getElementById('testModeBanner').classList.remove('visible');
+      document.body.classList.remove('test-active');
+      draw();
+    }
+
+    function testGetFeetY(state) {
+      return state.y + TEST.PLAYER_HEIGHT;
+    }
+
+    function testOnGround(state) {
+      const feetY = testGetFeetY(state);
+      // Sol principal
+      if (feetY >= state.groundY - 0.1 &&
+          state.x >= state.groundStartX &&
+          state.x <= state.groundEndX) return { on: true, surfaceY: state.groundY };
+      // Plateformes
+      for (const plat of state.platforms) {
+        const pType = plat.type || 'platform';
+        if (pType === 'decor') continue;
+        // Pour platform (top-only) et block : on détecte seulement par le dessus
+        const inXRange = state.x >= plat.x - 5 && state.x <= plat.x + plat.w + 5;
+        if (inXRange && Math.abs(feetY - plat.y) <= 6) {
+          return { on: true, surfaceY: plat.y };
+        }
+      }
+      return { on: false };
+    }
+
+    function testLoop(timestamp) {
+      if (!testMode) return;
+      if (testLastTime === null) testLastTime = timestamp;
+      const dt = Math.min((timestamp - testLastTime) / 1000, 0.05); // max 50ms
+      testLastTime = timestamp;
+
+      const s = testState;
+
+      // --- Mouvement horizontal ---
+      const left  = testKeys['KeyQ'] || testKeys['ArrowLeft'];
+      const right = testKeys['KeyD'] || testKeys['ArrowRight'];
+      const space = testKeys['Space'];
+      const shift = testKeys['ShiftLeft'] || testKeys['ShiftRight'];
+
+      if (s.dashTimer > 0) {
+        s.x += s.dashDir * TEST.DASH_SPEED * dt;
+        s.dashTimer -= dt;
+      } else {
+        if (left)  { s.x -= TEST.MOVE_SPEED * dt; s.dir = -1; }
+        if (right) { s.x += TEST.MOVE_SPEED * dt; s.dir =  1; }
+      }
+      if (left || right) s.walkCycle += 10 * dt; else s.walkCycle = 0;
+
+      // --- Détection sol avant saut ---
+      const groundInfo = testOnGround(s);
+
+      if (groundInfo.on) {
+        s.airJumps = 1;
+      }
+
+      // --- Saut / double saut ---
+      if (space && !s.jumpWasPressed) {
+        if (groundInfo.on && s.stamina >= TEST.JUMP_COST) {
+          s.velY = TEST.JUMP_FORCE;
+          s.stamina = Math.max(0, s.stamina - TEST.JUMP_COST);
+          s.airJumps = 1;
+        } else if (!groundInfo.on && s.airJumps > 0 && s.stamina >= TEST.DOUBLE_JUMP_COST) {
+          s.velY = TEST.JUMP_FORCE;
+          s.stamina = Math.max(0, s.stamina - TEST.DOUBLE_JUMP_COST);
+          s.airJumps--;
+        }
+      }
+      s.jumpWasPressed = space;
+
+      // --- Dash ---
+      if (shift && !s.dashWasPressed && s.dashTimer <= 0 && s.stamina >= TEST.DASH_COST) {
+        let desiredDir = left ? -1 : right ? 1 : s.dir;
+        s.dashDir   = desiredDir;
+        s.dashTimer = TEST.DASH_DURATION;
+        s.stamina   = Math.max(0, s.stamina - TEST.DASH_COST);
+      }
+      s.dashWasPressed = shift;
+
+      // Régén endurance (simplifiée)
+      s.stamina = Math.min(TEST.STAMINA_MAX, s.stamina + 8 * dt);
+
+      // --- Gravité + intégration verticale ---
+      s.velY += TEST.GRAVITY * dt;
+      s.y    += s.velY * dt;
+
+      // --- Collisions sol/plateformes ---
+      const feetY2 = testGetFeetY(s);
+
+      // Sol principal
+      if (feetY2 > s.groundY &&
+          s.x >= s.groundStartX &&
+          s.x <= s.groundEndX) {
+        s.y = s.groundY - TEST.PLAYER_HEIGHT;
+        s.velY = 0;
+      }
+
+      // Plateformes
+      for (const plat of s.platforms) {
+        const pType = plat.type || 'platform';
+        if (pType === 'decor') continue;
+        const fY = testGetFeetY(s);
+        const inX = s.x >= plat.x - 5 && s.x <= plat.x + plat.w + 5;
+        if (pType === 'block') {
+          // Block : collision sur tous les côtés
+          const playerLeft  = s.x - TEST.HEAD_RADIUS;
+          const playerRight = s.x + TEST.HEAD_RADIUS;
+          const playerTop   = s.y;
+          const playerBot   = fY;
+          const overlapX = playerRight > plat.x && playerLeft < plat.x + plat.w;
+          const overlapY = playerBot  > plat.y && playerTop < plat.y + plat.h;
+          if (overlapX && overlapY) {
+            // Collision par le dessus
+            if (s.velY >= 0 && playerBot - plat.y < plat.h * 0.6) {
+              s.y = plat.y - TEST.PLAYER_HEIGHT;
+              s.velY = 0;
+            }
+            // Collision par le dessous
+            else if (s.velY < 0 && plat.y + plat.h - playerTop < plat.h * 0.6) {
+              s.y = plat.y + plat.h;
+              s.velY = 0;
+            }
+          }
+        } else {
+          // Platform (top-only) : uniquement par le dessus
+          if (inX && fY > plat.y && fY - plat.y <= 6 + Math.abs(s.velY) * dt + 1 && s.velY >= 0) {
+            s.y = plat.y - TEST.PLAYER_HEIGHT;
+            s.velY = 0;
+          }
+        }
+      }
+
+      // --- Caméra : suit le joueur ---
+      const canvasW = els.view.clientWidth;
+      const canvasH = els.view.clientHeight;
+      const targetScrollX = canvasW / 2 - s.x * zoom;
+      const targetScrollY = canvasH / 2 - (s.y + TEST.PLAYER_HEIGHT / 2) * zoom;
+      scrollX += (targetScrollX - scrollX) * 0.1;
+      scrollY += (targetScrollY - scrollY) * 0.1;
+
+      // --- Rendu ---
+      drawTestFrame();
+
+      testAnimId = requestAnimationFrame(testLoop);
+    }
+
+    function drawTestFrame() {
+      const s = testState;
+      const lvl = data.levels[current];
+
+      // Dessiner le niveau normalement
+      draw();
+
+      // Superposer le joueur
+      const ctx2 = els.view.getContext('2d');
+      const dpr = Math.max(1, window.devicePixelRatio || 1);
+      ctx2.save();
+      ctx2.scale(dpr, dpr);
+      ctx2.translate(scrollX, scrollY);
+      ctx2.scale(zoom, zoom);
+
+      const px = s.x;
+      const py = s.y;
+      const hr = TEST.HEAD_RADIUS;
+      const bh = TEST.BODY_HEIGHT;
+      const lh = TEST.LEG_HEIGHT;
+      const flip = s.dir === -1;
+
+      ctx2.save();
+      if (flip) { ctx2.translate(px * 2, 0); ctx2.scale(-1, 1); }
+
+      // Ombre
+      ctx2.save();
+      ctx2.globalAlpha = 0.18;
+      ctx2.fillStyle = '#000';
+      ctx2.beginPath();
+      ctx2.ellipse(px, py + hr + bh + lh, hr * 1.2, 5, 0, 0, Math.PI * 2);
+      ctx2.fill();
+      ctx2.restore();
+
+      // Jambes
+      const legSwing = Math.sin(s.walkCycle * Math.PI * 2) * 10;
+      ctx2.strokeStyle = '#1e3259';
+      ctx2.lineWidth = 7;
+      ctx2.lineCap = 'round';
+      // Jambe gauche
+      ctx2.beginPath();
+      ctx2.moveTo(px, py + hr + bh);
+      ctx2.lineTo(px - 8 + legSwing, py + hr + bh + lh);
+      ctx2.stroke();
+      // Jambe droite
+      ctx2.beginPath();
+      ctx2.moveTo(px, py + hr + bh);
+      ctx2.lineTo(px + 8 - legSwing, py + hr + bh + lh);
+      ctx2.stroke();
+
+      // Corps
+      ctx2.fillStyle = '#3278dc';
+      ctx2.beginPath();
+      ctx2.roundRect(px - hr * 0.75, py + hr, hr * 1.5, bh, 5);
+      ctx2.fill();
+      ctx2.strokeStyle = '#1a4fa0';
+      ctx2.lineWidth = 1.5;
+      ctx2.stroke();
+
+      // Bras
+      const armSwing = -legSwing * 0.6;
+      ctx2.strokeStyle = '#ffdfb1';
+      ctx2.lineWidth = 6;
+      ctx2.beginPath();
+      ctx2.moveTo(px - hr * 0.6, py + hr + 5);
+      ctx2.lineTo(px - hr * 0.6 - 14 + armSwing, py + hr + 5 + 18);
+      ctx2.stroke();
+      ctx2.beginPath();
+      ctx2.moveTo(px + hr * 0.6, py + hr + 5);
+      ctx2.lineTo(px + hr * 0.6 + 14 - armSwing, py + hr + 5 + 18);
+      ctx2.stroke();
+
+      // Tête
+      ctx2.fillStyle = '#ffdcb0';
+      ctx2.beginPath();
+      ctx2.arc(px, py + hr, hr, 0, Math.PI * 2);
+      ctx2.fill();
+      ctx2.strokeStyle = '#b8834a';
+      ctx2.lineWidth = 1.5;
+      ctx2.stroke();
+
+      // Cheveux
+      ctx2.fillStyle = '#3c2808';
+      ctx2.beginPath();
+      ctx2.arc(px, py + hr * 0.6, hr * 0.85, Math.PI, 0);
+      ctx2.fill();
+
+      // Yeux
+      ctx2.fillStyle = '#fff';
+      ctx2.beginPath(); ctx2.ellipse(px + 7, py + hr - 2, 4, 5, 0, 0, Math.PI * 2); ctx2.fill();
+      ctx2.fillStyle = '#222';
+      ctx2.beginPath(); ctx2.arc(px + 8, py + hr - 1, 2.5, 0, Math.PI * 2); ctx2.fill();
+
+      // Bouche
+      ctx2.strokeStyle = '#8b4513';
+      ctx2.lineWidth = 1.5;
+      ctx2.beginPath();
+      ctx2.arc(px + 5, py + hr + 7, 4, 0.1, Math.PI - 0.1);
+      ctx2.stroke();
+
+      ctx2.restore(); // flip
+
+      // Barre d'endurance
+      const barW = 50, barH = 6;
+      const barX = px - barW / 2;
+      const barY = py - 18;
+      ctx2.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx2.fillRect(barX, barY, barW, barH);
+      const stRatio = s.stamina / TEST.STAMINA_MAX;
+      ctx2.fillStyle = stRatio > 0.4 ? '#46aaff' : '#f59e0b';
+      ctx2.fillRect(barX, barY, barW * stRatio, barH);
+      ctx2.strokeStyle = 'rgba(255,255,255,0.3)';
+      ctx2.lineWidth = 1;
+      ctx2.strokeRect(barX, barY, barW, barH);
+
+      ctx2.restore();
+    }
+
+    // Capturer les touches uniquement quand le test est actif
+    window.addEventListener('keydown', (e) => {
+      if (!testMode) return;
+      testKeys[e.code] = true;
+      // Bloquer la navigation éditeur pendant le test
+      if (['Space','ArrowLeft','ArrowRight','ArrowUp','ArrowDown',
+           'KeyQ','KeyD','ShiftLeft','ShiftRight'].includes(e.code)) {
+        e.stopImmediatePropagation();
+        e.preventDefault();
+      }
+      if (e.code === 'Escape') stopTest();
+    }, true);
+
+    window.addEventListener('keyup', (e) => {
+      if (!testMode) return;
+      testKeys[e.code] = false;
+    }, true);
   </script>
 </body>
 </html>

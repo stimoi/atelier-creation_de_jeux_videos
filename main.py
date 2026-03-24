@@ -141,7 +141,7 @@ def load_tutorial_image():
 tutorial_texts = load_tutorial_texts()
 tutorial_image = load_tutorial_image()
 
-## Sélectionne le niveau sélectionné
+
 def select_tutorial_for_level(level):
     global current_tutorial_texts, tutorial_visible, tutorial_index
     if not level:
@@ -258,7 +258,7 @@ STAMINA_JUMP_COST = 10
 STAMINA_REGEN_DELAY = 4.0
 STAMINA_REGEN_INTERVAL = 0.5
 STAMINA_REGEN_AMOUNT = 5
-DOUBLE_JUMP_COST = 10
+DOUBLE_JUMP_COST = 15
 DASH_COST = 10
 DASH_SPEED = 900
 DASH_DURATION = 0.2

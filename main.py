@@ -1662,249 +1662,355 @@ while running:
         if monster["hit_flash"] > 0:  # Si le monstre vient de prendre des dégâts
             monster["hit_flash"] -= dt  # Réduire la durée du flash
 
-    # Collision joueur-ennemi
-    p_center = (int(player_pos.x), int(player_pos.y))
-    if not is_invulnerable:
-        for monster in monsters[:]:
+    # === COLLISIONS JOUEUR-MONSTRE ===
+    p_center = (int(player_pos.x), int(player_pos.y))  # Centre du joueur pour la collision
+    if not is_invulnerable:  # Ne vérifier les collisions que si le joueur est vulnérable
+        for monster in monsters[:]:  # Itérer sur une copie pour pouvoir supprimer
+            # Utiliser la fonction de collision cercle-rectangle
             if circle_rect_collision((monster["pos"].x, monster["pos"].y), monster["radius"], player_rect):
-                lives -= 1
-                is_invulnerable = True
-                invuln_timer = invuln_time
-                player_pos = spawn_point
-                player_vel_y = 0
+                # Collision détectée entre le joueur et un monstre!
+                lives -= 1  # Le joueur perd une vie
+                is_invulnerable = True  # Le joueur devient invulnérable
+                invuln_timer = invuln_time  # Démarrer le timer d'invulnérabilité
+                player_pos = spawn_point  # Téléporter le joueur au point de spawn
+                player_vel_y = 0  # Annuler la vélocité verticale
+                # Créer des particules jaunes pour indiquer la prise de dégâts
                 create_particles(player_pos, (255, 255, 100), 15)
-                break
+                break  # Sortir de la boucle (une seule collision à la fois)
 
-    if is_invulnerable:
-        invuln_timer -= dt
-        if invuln_timer <= 0:
-            is_invulnerable = False
+    # === GESTION DE L'INVULNÉRABILITÉ DU JOUEUR ===
+    if is_invulnerable:  # Si le joueur est actuellement invulnérable
+        invuln_timer -= dt  # Réduire le temps d'invulnérabilité restant
+        if invuln_timer <= 0:  # Quand le timer est écoulé
+            is_invulnerable = False  # Le joueur redevient vulnérable
 
-    # Particules
-    for part in particles[:]:
+    # === MISE À JOUR DES PARTICULES ===
+    for part in particles[:]:  # Itérer sur une copie pour pouvoir supprimer pendant l'itération
+        # Mettre à jour la position de la particule
         part["pos"] += part["vel"] * dt
+        # Appliquer une gravité réduite aux particules (effet plus réaliste)
         part["vel"].y += GRAVITY * 0.5 * dt
-        part["life"] -= dt * 2
-        if part["life"] <= 0:
-            particles.remove(part)
+        # Réduire la durée de vie de la particule
+        part["life"] -= dt * 2  # Les particules disparaissent plus vite qu'elles ne tombent
+        if part["life"] <= 0:  # Si la particule est "morte"
+            particles.remove(part)  # Supprimer la particule de la liste
 
-    # Victoire
+    # === DÉTECTION DE VICTOIRE (atteinte de l'objectif) ===
     if (not victory and not level_transition_active and
+        # Créer un rectangle pour la tête du joueur et vérifier la collision avec l'objectif
         pygame.Rect(int(player_pos.x - head_radius), int(player_pos.y - head_radius),
                     head_radius*2, head_radius*2).colliderect(goal_rect)):
-        hide_tutorial()
-        if selected_level_idx < len(levels) - 1:
+        # Le joueur a atteint la porte/objectif!
+        hide_tutorial()  # Masquer le tutoriel
+        if selected_level_idx < len(levels) - 1:  # S'il y a d'autres niveaux
+            # Démarrer une transition vers le niveau suivant
             level_transition_active = True
-            level_transition_phase = "fade_out"
+            level_transition_phase = "fade_out"  # Commencer par un fondu au noir
             level_transition_timer = 0.0
-            level_transition_next_idx = selected_level_idx + 1
+            level_transition_next_idx = selected_level_idx + 1  # Index du niveau suivant
         else:
+            # C'était le dernier niveau: victoire complète!
             victory = True
 
-    # --- DESSIN ---
-
-    # Ciel dégradé
+    # === SYSTÈME DE RENDU GRAPHIQUE ===
+    
+    # === ARRIÈRE-PLAN: CIEL DÉGRADÉ ===
     for i in range(SCREEN_HEIGHT):
+        # Calculer la couleur interpolée pour chaque ligne horizontale
         color = (
-            int(70 + (130 - 70) * i / SCREEN_HEIGHT),
-            int(130 + (180 - 130) * i / SCREEN_HEIGHT),
-            int(180 + (230 - 180) * i / SCREEN_HEIGHT)
+            int(70 + (130 - 70) * i / SCREEN_HEIGHT),  # Rouge: 70 → 130
+            int(130 + (180 - 130) * i / SCREEN_HEIGHT),  # Vert: 130 → 180
+            int(180 + (230 - 180) * i / SCREEN_HEIGHT)   # Bleu: 180 → 230
         )
+        # Dessiner une ligne horizontale avec la couleur calculée
         pygame.draw.line(screen, color, (0, i), (SCREEN_WIDTH, i))
 
-    # Sol avec texture
-    ground_rect = pygame.Rect(GROUND_START_X - camera_offset.x, GROUND_Y - camera_offset.y, GROUND_END_X - GROUND_START_X, 100)
-    pygame.draw.rect(screen, GROUND_COLOR, ground_rect)
-    pygame.draw.rect(screen, (25, 100, 25), ground_rect, 3)
-    for i in range(0, 3000, 50):
-        pygame.draw.line(screen, (44, 160, 44),
-                        (i - camera_offset.x, GROUND_Y - camera_offset.y),
-                        (i - camera_offset.x, GROUND_Y - camera_offset.y + 100), 2)
+    # === SOL AVEC TEXTURE ===
+    ground_rect = pygame.Rect(
+        GROUND_START_X - camera_offset.x,  # Position X (décalée par la caméra)
+        GROUND_Y - camera_offset.y,        # Position Y (décalée par la caméra)
+        GROUND_END_X - GROUND_START_X,   # Largeur totale du sol
+        100                             # Hauteur visible du sol
+    )
+    pygame.draw.rect(screen, GROUND_COLOR, ground_rect)  # Dessiner le rectangle principal du sol
+    pygame.draw.rect(screen, (25, 100, 25), ground_rect, 3)  # Bordure verte plus foncée
+    
+    # === LIGNES DE TEXTURE DU SOL ===
+    for i in range(0, 3000, 50):  # Lignes toutes les 50 pixels
+        pygame.draw.line(screen, (44, 160, 44),  # Vert plus clair pour les lignes
+                        (i - camera_offset.x, GROUND_Y - camera_offset.y),  # Point de départ
+                        (i - camera_offset.x, GROUND_Y - camera_offset.y + 100),  # Point d'arrivée
+                        2)  # Épaisseur de la ligne
 
-    # Plateformes avec relief
+    # === PLATEFORMES AVEC EFFET DE RELIEF ===
     for plat in platforms:
+        # Calculer la position de la plateforme à l'écran (décalée par la caméra)
         plat_rect_screen = plat.move(-camera_offset.x, -camera_offset.y)
+        # Dessiner le rectangle principal de la plateforme
         pygame.draw.rect(screen, PLATFORM_COLOR, plat_rect_screen)
+        # Dessiner la bordure en surbrillance
         pygame.draw.rect(screen, PLATFORM_HIGHLIGHT, plat_rect_screen, 3)
-        pygame.draw.line(screen, (80, 50, 20),
-                        (plat_rect_screen.left, plat_rect_screen.top + 5),
-                        (plat_rect_screen.right, plat_rect_screen.top + 5), 2)
+        # Ajouter une ligne horizontale pour un effet de profondeur
+        pygame.draw.line(screen, (80, 50, 20),  # Marron foncé pour l'ombre
+                        (plat_rect_screen.left, plat_rect_screen.top + 5),  # Point de départ
+                        (plat_rect_screen.right, plat_rect_screen.top + 5),  # Point d'arrivée
+                        2)  # Épaisseur de la ligne
 
-    # Porte avec détails
-    goal_rect_screen = goal_rect.move(-camera_offset.x, -camera_offset.y)
+    # === PORTE/OBJECTIF AVEC DÉTAILS VISUELS ===
+    goal_rect_screen = goal_rect.move(-camera_offset.x, -camera_offset.y)  # Position à l'écran
+    # Dessiner le rectangle principal de la porte
     pygame.draw.rect(screen, DOOR_COLOR, goal_rect_screen)
+    # Dessiner le cadre de la porte
     pygame.draw.rect(screen, DOOR_FRAME, goal_rect_screen, 5)
-    pygame.draw.line(screen, (100, 70, 20),
-                    (goal_rect_screen.centerx, goal_rect_screen.top),
-                    (goal_rect_screen.centerx, goal_rect_screen.bottom), 3)
-    knob_pos = (goal_rect_screen.right - 12, goal_rect_screen.centery)
-    pygame.draw.circle(screen, (30, 30, 30), knob_pos, 6)
-    pygame.draw.circle(screen, (80, 80, 80), knob_pos, 3)
+    # Ajouter une ligne verticale centrale pour simuler les battants de porte
+    pygame.draw.line(screen, (100, 70, 20),  # Marron très foncé
+                    (goal_rect_screen.centerx, goal_rect_screen.top),    # Point de départ (en haut)
+                    (goal_rect_screen.centerx, goal_rect_screen.bottom),  # Point d'arrivée (en bas)
+                    3)  # Épaisseur de la ligne
+    # Dessiner la poignée de porte
+    knob_pos = (goal_rect_screen.right - 12, goal_rect_screen.centery)  # Position de la poignée
+    pygame.draw.circle(screen, (30, 30, 30), knob_pos, 6)  # Cercle extérieur (noir)
+    pygame.draw.circle(screen, (80, 80, 80), knob_pos, 3)  # Cercle intérieur (gris)
 
-    # Ombres
-    player_feet = player_pos.y + head_radius + body_height + leg_height
-    ## draw_shadow(player_pos.x, player_feet, head_radius + 12)
-    ## for monster in monsters:
+    # === OMBRES AU SOL (commentées pour le moment) ===
+    player_feet = player_pos.y + head_radius + body_height + leg_height  # Position Y des pieds du joueur
+    # Ombres désactivées (code commenté)
+    ## draw_shadow(player_pos.x, player_feet, head_radius + 12)  # Ombre du joueur
+    ## for monster in monsters:  # Ombres de tous les monstres
     ##    draw_shadow(monster["pos"].x, monster["pos"].y + monster["radius"], monster["radius"])
 
-    # Joueur
+    # === RENDU DU JOUEUR ===
+    # Calculer la position du joueur à l'écran
     p_center_screen = (int(player_pos.x - camera_offset.x), int(player_pos.y - camera_offset.y))
+    # Vérifier si le joueur est en mouvement actuellement
     moving_now = keys[pygame.K_q] or keys[pygame.K_LEFT] or keys[pygame.K_d] or keys[pygame.K_RIGHT]
+    # Calculer l'effet de "bobbing" vertical pendant la marche
     bob = math.sin(walk_cycle * 12) * 2 if moving_now else 0
+    # Position finale de rendu (avec effet de bobbing)
     render_center = (p_center_screen[0], p_center_screen[1] + int(bob))
 
+    # === GESTION DE L'INVULNÉRABILITÉ VISUELLE (effet de clignotement) ===
     if not is_invulnerable or int(invuln_timer * 10) % 2 == 0:
+        # Si le joueur n'est pas invulnérable OU s'il est dans une phase visible du clignotement
+        
+        # === SÉLECTION DE L'ANIMATION DE MARCHE ===
         if moving:
+            # Animation de marche en cycle (4 images)
             if cnt < 5:
-                movement = "perso.png"
+                movement = "perso.png"   # Image 1: position debout
             elif cnt < 9:
-                movement = "perso2.png"
+                movement = "perso2.png"  # Image 2: jambe droite en avant
             elif cnt < 13:
-                movement = "perso3.png"
+                movement = "perso3.png"  # Image 3: position intermédiaire
             elif cnt < 17:
-                movement = "perso4.png"
+                movement = "perso4.png"  # Image 4: jambe gauche en avant
             elif cnt > 16:
-                cnt = 0
+                cnt = 0  # Réinitialiser le compteur pour boucler
         else:
-            movement = "perso.png"
-        # Chargement et définition les coordonnées de départ pour l'image
+            movement = "perso.png"  # Position debout quand immobile
+            
+        # === CHARGEMENT ET RENDU DE L'IMAGE DU PERSONNAGE ===
+        # Charger l'image appropriée pour l'animation actuelle
         image = load_image(movement)
+        # Redimensionner l'image (taille 2x pour meilleure visibilité)
         image = pygame.transform.scale(image, (image.get_width()*2, image.get_height()*2))
+        # Retourner l'image horizontalement si le joueur regarde à gauche
         if direction == -1:
             image = pygame.transform.flip(image, True, False)
-        image_rect = pygame.Rect(p_center_screen[0]-image.get_width()/2, p_center_screen[1]+image.get_height()/2, -40, -40)
-
-        # Dessiner l'image
+        # Calculer le rectangle de positionnement de l'image
+        image_rect = pygame.Rect(
+            p_center_screen[0]-image.get_width()/2,  # Centrer horizontalement
+            p_center_screen[1]+image.get_height()/2,  # Position Y (note: + car l'origine est en haut)
+            -40,  # Offset X (ajustement manuel)
+            -40   # Offset Y (ajustement manuel)
+        )
+        # Dessiner l'image du personnage à l'écran
         screen.blit(image, image_rect)
 
-    # Projectiles avec traînée
+    # === RENDU DES PROJECTILES AVEC EFFET DE TRAÎNÉE ===
     for proj in projectiles:
+        # Calculer la position du projectile à l'écran
         proj_screen = (int(proj["pos"].x - camera_offset.x), int(proj["pos"].y - camera_offset.y))
+        # Dessiner une couche extérieure plus claire (effet de glow)
         pygame.draw.circle(screen, (150, 255, 150), proj_screen, projectile_radius + 2)
+        # Dessiner le cercle principal du projectile (vert vif)
         pygame.draw.circle(screen, (0, 255, 0), proj_screen, projectile_radius)
+        # Dessiner le centre blanc pour un effet de brillance
         pygame.draw.circle(screen, (255, 255, 255), proj_screen, projectile_radius - 3)
 
-    # Monstres (types: tank, fast, flyer)
+    # === RENDU DES MONSTRES (avec animations spécifiques par type) ===
     for monster in monsters:
-        monster_screen = (int(monster["pos"].x - camera_offset.x),
-                         int(monster["pos"].y - camera_offset.y))
-        r = monster["radius"]
+        # Calculer la position du monstre à l'écran
+        monster_screen = (
+            int(monster["pos"].x - camera_offset.x),  # Position X à l'écran
+            int(monster["pos"].y - camera_offset.y)   # Position Y à l'écran
+        )
+        r = monster["radius"]  # Rayon du monstre
 
-        # Couleur selon flash
+        # === DÉTERMINATION DE LA COULEUR (avec effet de flash de dégâts) ===
         base_colors = {
-            "tank": (200, 40, 40),
-            "fast": (255, 140, 0),
-            "flyer": (100, 160, 255),
+            "tank": (200, 40, 40),    # Rouge foncé pour les tanks
+            "fast": (255, 140, 0),   # Orange pour les rapides
+            "flyer": (100, 160, 255), # Bleu clair pour les volants
         }
+        # Couleur normale ou blanche si le monstre vient de prendre des dégâts
         monster_color = (255, 220, 220) if monster["hit_flash"] > 0 else base_colors.get(monster["type"], (220, 20, 20))
 
+        # === RENDU SPÉCIFIQUE PAR TYPE DE MONSTRE ===
         if monster["type"] == "tank":
-            image = load_image('monster2.webp')
-            if monster["dir"] == -1:
+            # === TANK: monstre gros et lent ===
+            image = load_image('monster2.webp')  # Charger l'image du tank
+            if monster["dir"] == -1:  # Retourner si regarde à gauche
                 image = pygame.transform.flip(image, True, False)
+            # Redimensionner (taille 3x pour les gros monstres)
             image = pygame.transform.scale(image, (image.get_width()*3, image.get_height()*3))
-            image_rect = pygame.Rect(monster_screen[0]-image.get_width()/3, monster_screen[1]-image.get_height()/3, 40, 40)
-
-
-            # Dessiner l'image
+            # Positionner l'image
+            image_rect = pygame.Rect(
+                monster_screen[0]-image.get_width()/3,  # Position X (avec ajustement)
+                monster_screen[1]-image.get_height()/3,  # Position Y (avec ajustement)
+                40,  # Largeur du rectangle de collision
+                40   # Hauteur du rectangle de collision
+            )
+            # Dessiner l'image du tank
             screen.blit(image, image_rect)
+            
         elif monster["type"] == "fast":
-            image = load_image('monster1.png')
-            if monster["dir"] == -1:
+            # === FAST: monstre petit et rapide ===
+            image = load_image('monster1.png')  # Charger l'image du monstre rapide
+            if monster["dir"] == -1:  # Retourner si regarde à gauche
                 image = pygame.transform.flip(image, True, False)
-            image_rect = pygame.Rect(monster_screen[0]-image.get_width()/3, monster_screen[1]-image.get_height()/3, 40, 40)
-
-
-            # Dessiner l'image
+            # Positionner l'image (sans redimensionnement supplémentaire)
+            image_rect = pygame.Rect(
+                monster_screen[0]-image.get_width()/3,  # Position X
+                monster_screen[1]-image.get_height()/3,  # Position Y
+                40,  # Largeur
+                40   # Hauteur
+            )
+            # Dessiner l'image du monstre rapide
             screen.blit(image, image_rect)
+            
         else:  # flyer
+            # === FLYER: monstre volant avec animation complexe ===
+            # Animation de vol en 5 images
             if cnt2 < 5:
-                monster["anim"] = 'monsterb1.png'
+                monster["anim"] = 'monsterb1.png'    # Ailes hautes
             elif cnt2 < 9:
-                monster["anim"] = 'monsterb2.webp'
+                monster["anim"] = 'monsterb2.webp'  # Ailes moyennes-hautes
             elif cnt2 < 13:
-                monster["anim"] = 'monsterb3.png'
+                monster["anim"] = 'monsterb3.png'  # Ailes moyennes
             elif cnt2 < 17:
-                monster["anim"] = 'monsterb4.webp'
+                monster["anim"] = 'monsterb4.webp'  # Ailes moyennes-basses
             elif cnt2 < 21:
-                monster["anim"] = 'monsterb5.webp'
+                monster["anim"] = 'monsterb5.webp'  # Ailes basses
             elif cnt2 > 20:
-                monster["anim"] = 'monsterb1.png'
-                cnt2 = 0
+                monster["anim"] = 'monsterb1.png'  # Retour au début
+                cnt2 = 0  # Réinitialiser le compteur
+            # Charger l'image d'animation actuelle
             image = load_image(monster["anim"])
-            if monster["dir"] == 1:
+            if monster["dir"] == 1:  # Retourner si regarde à droite (inverse des autres)
                 image = pygame.transform.flip(image, True, False)
+            # Redimensionner (taille 2x)
             image = pygame.transform.scale(image, (image.get_width()*2, image.get_height()*2))
-            image_rect = pygame.Rect(monster_screen[0]-image.get_width()/2, monster_screen[1]-image.get_height()/2, 40, 40)
-
-            # Dessiner l'image
+            # Positionner l'image
+            image_rect = pygame.Rect(
+                monster_screen[0]-image.get_width()/2,  # Position X
+                monster_screen[1]-image.get_height()/2,  # Position Y
+                40,  # Largeur
+                40   # Hauteur
+            )
+            # Dessiner l'image du monstre volant
             screen.blit(image, image_rect)
 
-    # Particules
+    # === RENDU DES PARTICULES ===
     for part in particles:
-        if part["life"] > 0:
+        if part["life"] > 0:  # Ne dessiner que les particules "vivantes"
+            # Calculer la position de la particule à l'écran
             part_screen = (int(part["pos"].x - camera_offset.x), int(part["pos"].y - camera_offset.y))
-            alpha = int(255 * part["life"])
+            # Calculer la transparence en fonction de la durée de vie
+            alpha = int(255 * part["life"])  # Plus la particule est vieille, plus elle est transparente
+            # Calculer la couleur avec fade-out en fonction de la durée de vie
             color = tuple(min(255, max(0, int(c * part["life"]))) for c in part["color"])
+            # Dessiner la particule comme un petit cercle
             pygame.draw.circle(screen, color, part_screen, 3)
 
-    # --- HUD ---
-    # Panneau semi-transparent
-    hud_panel = pygame.Surface((300, 210), pygame.SRCALPHA)
-    hud_panel.fill((0, 0, 0, 120))
-    screen.blit(hud_panel, (10, 10))
+    # === INTERFACE UTILISATEUR (HUD) ===
+    # === PANNEAU SEMI-TRANSPARENT ===
+    hud_panel = pygame.Surface((300, 210), pygame.SRCALPHA)  # Surface avec transparence
+    hud_panel.fill((0, 0, 0, 120))  # Fond noir semi-transparent
+    screen.blit(hud_panel, (10, 10))  # Positionner en haut à gauche
 
+    # === AFFICHAGE DU SCORE ===
     score_text = font.render(f"Score: {score}", True, (255, 255, 255))
     screen.blit(score_text, (30, 25))
 
-    # Vies avec cœurs
+    # === AFFICHAGE DES VIES (avec cœurs) ===
     lives_text = font.render("Vies:", True, (255, 255, 255))
     screen.blit(lives_text, (30, 70))
+    # Dessiner un cœur pour chaque vie restante
     for i in range(lives):
-        heart_x = 130 + i * 35
-        pygame.draw.circle(screen, (255, 50, 50), (heart_x - 5, 85), 10)
-        pygame.draw.circle(screen, (255, 50, 50), (heart_x + 5, 85), 10)
-        pygame.draw.polygon(screen, (255, 50, 50),
+        heart_x = 130 + i * 35  # Espacer les cœurs horizontalement
+        # Dessiner un cœur avec deux cercles et un triangle
+        pygame.draw.circle(screen, (255, 50, 50), (heart_x - 5, 85), 10)  # Cercle gauche
+        pygame.draw.circle(screen, (255, 50, 50), (heart_x + 5, 85), 10)  # Cercle droit
+        pygame.draw.polygon(screen, (255, 50, 50),  # Triangle inférieur
                            [(heart_x - 15, 85), (heart_x, 100), (heart_x + 15, 85)])
 
+    # === BARRE D'ENDURANCE ===
     stamina_label = small_font.render("Endurance", True, (180, 200, 255))
     screen.blit(stamina_label, (30, 120))
+    # Arrière-plan de la barre
     stamina_bar_bg = pygame.Rect(30, 150, 240, 20)
     pygame.draw.rect(screen, (40, 40, 40), stamina_bar_bg, border_radius=6)
-    stamina_ratio = stamina / STAMINA_MAX if STAMINA_MAX else 0
-    fill_width = int(stamina_bar_bg.width * max(0, min(1, stamina_ratio)))
-    if fill_width > 0:
-        stamina_bar_fill = pygame.Rect(stamina_bar_bg.left, stamina_bar_bg.top, fill_width, stamina_bar_bg.height)
-        pygame.draw.rect(screen, (70, 170, 255), stamina_bar_fill, border_radius=6)
-    pygame.draw.rect(screen, (120, 180, 255), stamina_bar_bg, 2, border_radius=6)
+    # Calculer le remplissage de la barre
+    stamina_ratio = stamina / STAMINA_MAX if STAMINA_MAX else 0  # Ratio d'endurance (0 à 1)
+    fill_width = int(stamina_bar_bg.width * max(0, min(1, stamina_ratio)))  # Largeur du remplissage
+    if fill_width > 0:  # Ne dessiner que s'il y a de l'endurance
+        stamina_bar_fill = pygame.Rect(
+            stamina_bar_bg.left, 
+            stamina_bar_bg.top, 
+            fill_width, 
+            stamina_bar_bg.height
+        )
+        pygame.draw.rect(screen, (70, 170, 255), stamina_bar_fill, border_radius=6)  # Bleu clair
+    # Bordure de la barre
+    pygame.draw.rect(screen, (120, 180, 255), stamina_bar_bg, 2, border_radius=6)  # Bleu plus clair
 
+    # === INDICATEUR D'INVULNÉRABILITÉ ===
     if is_invulnerable:
         inv_text = small_font.render("⚡ INVULNÉRABLE", True, (255, 255, 0))
         screen.blit(inv_text, (30, 180))
 
-    # Indicateur de cooldown spawn
+    # === INDICATEUR DE COOLDOWN DE SPAWN DES MONSTRES ===
     if monster_spawn_timer > 0:
         cooldown_text = small_font.render(f"Prochain spawn: {monster_spawn_timer:.1f}s",
                                          True, (200, 200, 200))
-        screen.blit(cooldown_text, (SCREEN_WIDTH - 350, 30))
+        screen.blit(cooldown_text, (SCREEN_WIDTH - 350, 30))  # En haut à droite
 
+    # === SYSTÈME DE TRANSITION ENTRE NIVEAUX ===
     if level_transition_active:
-        level_transition_timer += dt
-        overlay_alpha = 0
+        level_transition_timer += dt  # Faire progresser le timer de transition
+        overlay_alpha = 0  # Transparence de l'overlay (0 = transparent, 255 = noir complet)
+        
         if level_transition_phase == "fade_out":
+            # === PHASE DE FONDU AU NOIR ===
             if LEVEL_TRANSITION_FADE_OUT > 0:
+                # Calculer l'alpha en fonction du temps écoulé
                 overlay_alpha = min(255, int((level_transition_timer / LEVEL_TRANSITION_FADE_OUT) * 255))
             else:
-                overlay_alpha = 255
+                overlay_alpha = 255  # Noir complet
+            
+            # Vérifier si le fondu au noir est terminé
             if level_transition_timer >= LEVEL_TRANSITION_FADE_OUT:
-                selected_level_idx = level_transition_next_idx
-                apply_level(levels[selected_level_idx])
-                instantiate_level_enemies()
-                player_pos = spawn_point
-                player_vel_y = 0
-                projectiles = []
-                particles = []
-                monster_spawn_timer = 0.0
+                # === CHARGEMENT DU NOUVEAU NIVEAU ===
+                selected_level_idx = level_transition_next_idx  # Changer de niveau
+                apply_level(levels[selected_level_idx])  # Appliquer la configuration du nouveau niveau
+                instantiate_level_enemies()  # Créer les ennemis du nouveau niveau
+                player_pos = spawn_point  # Positionner le joueur au nouveau spawn
+                player_vel_y = 0  # Annuler la vélocité verticale
+                projectiles = []  # Vider les projectiles
+                particles = []  # Vider les particules
+                monster_spawn_timer = 0.0  # Réinitialiser le timer de spawn
+                # Réinitialiser le système d'endurance
                 stamina = STAMINA_MAX
                 stamina_idle_timer = 0.0
                 stamina_regen_timer = 0.0
@@ -1917,77 +2023,110 @@ while running:
                 prev_on_ground = True
                 is_invulnerable = False
                 invuln_timer = 0.0
+                # Centrer la caméra sur le joueur
                 camera_offset.x = player_pos.x - SCREEN_WIDTH // 2
                 camera_offset.y = player_pos.y - SCREEN_HEIGHT // 2
-                start_tutorial
+                start_tutorial()  # Afficher le tutoriel du nouveau niveau
+                
+                # Passer à la phase de fondu depuis le noir
                 level_transition_phase = "fade_in"
                 level_transition_timer = 0.0
-                overlay_alpha = 255
-        else:
+                overlay_alpha = 255  # Commencer avec un écran noir
+                
+        else:  # level_transition_phase == "fade_in"
+            # === PHASE DE FONDU DEPUIS LE NOIR ===
             if LEVEL_TRANSITION_FADE_IN > 0:
+                # Calculer l'alpha en fonction du temps écoulé (inverse du fade_out)
                 overlay_alpha = max(0, 255 - int((level_transition_timer / LEVEL_TRANSITION_FADE_IN) * 255))
             else:
-                overlay_alpha = 0
+                overlay_alpha = 0  # Transparent
+            
+            # Vérifier si le fondu depuis le noir est terminé
             if level_transition_timer >= LEVEL_TRANSITION_FADE_IN:
-                level_transition_active = False
-                level_transition_next_idx = None
-                level_transition_phase = "fade_out"
-                level_transition_timer = 0.0
-                overlay_alpha = 0
+                level_transition_active = False  # Terminer la transition
+                level_transition_next_idx = None  # Réinitialiser l'index du prochain niveau
+                level_transition_phase = "fade_out"  # Réinitialiser la phase par défaut
+                level_transition_timer = 0.0  # Réinitialiser le timer
+                overlay_alpha = 0  # Pas d'overlay
+        
+        # === DESSIN DE L'OVERLAY DE TRANSITION ===
         if overlay_alpha > 0:
             overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-            overlay.fill((0, 0, 0, overlay_alpha))
+            overlay.fill((0, 0, 0, overlay_alpha))  # Noir avec transparence variable
             screen.blit(overlay, (0, 0))
 
-    # Messages de fin
+    # === ÉCRAN DE VICTOIRE ===
     if victory:
+        # === ARRIÈRE-PLAN SEMI-TRANSPARENT ===
         overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 180))
+        overlay.fill((0, 0, 0, 180))  # Noir avec 70% d'opacité
         screen.blit(overlay, (0, 0))
 
-        big_text = pygame.font.SysFont(None, 120).render("VICTOIRE !", True, (255, 215, 0))
-        sub_text = font.render("Félicitations !", True, (255, 255, 255))
-        score_final = font.render(f"Score Final: {score}", True, (255, 255, 255))
+        # === MESSAGES DE VICTOIRE ===
+        # Grand titre "VICTOIRE !"
+        big_text = pygame.font.SysFont(None, 120).render("VICTOIRE !", True, (255, 215, 0))  # Or
+        # Sous-titre "Félicitations !"
+        sub_text = font.render("Félicitations !", True, (255, 255, 255))  # Blanc
+        # Score final
+        score_final = font.render(f"Score Final: {score}", True, (255, 255, 255))  # Blanc
 
+        # Positionner et dessiner les textes (centrés horizontalement)
         screen.blit(big_text, (SCREEN_WIDTH//2 - big_text.get_width()//2, SCREEN_HEIGHT//2 - 100))
         screen.blit(sub_text, (SCREEN_WIDTH//2 - sub_text.get_width()//2, SCREEN_HEIGHT//2 + 20))
         screen.blit(score_final, (SCREEN_WIDTH//2 - score_final.get_width()//2, SCREEN_HEIGHT//2 + 70))
+        
+        # Afficher l'écran pendant 1.5 secondes
         pygame.display.flip()
         pygame.time.delay(1500)
-        # Retour au menu
+        
+        # === RETOUR AU MENU PRINCIPAL ===
         game_state = "MENU"
-        victory = False
-        level_transition_active = False
+        victory = False  # Réinitialiser l'état de victoire
+        level_transition_active = False  # Réinitialiser le système de transition
         level_transition_next_idx = None
         level_transition_phase = "fade_out"
         level_transition_timer = 0.0
 
+    # === ÉCRAN DE GAME OVER ===
     if lives <= 0:
+        # === ARRIÈRE-PLAN SEMI-TRANSPARENT ===
         overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 200))
+        overlay.fill((0, 0, 0, 200))  # Noir avec 78% d'opacité
         screen.blit(overlay, (0, 0))
 
-        over_text = pygame.font.SysFont(None, 96).render("GAME OVER", True, (255, 50, 50))
-        score_final = font.render(f"Score: {score}", True, (255, 255, 255))
+        # === MESSAGES DE GAME OVER ===
+        # Grand titre "GAME OVER"
+        over_text = pygame.font.SysFont(None, 96).render("GAME OVER", True, (255, 50, 50))  # Rouge vif
+        # Score obtenu
+        score_final = font.render(f"Score: {score}", True, (255, 255, 255))  # Blanc
 
+        # Positionner et dessiner les textes (centrés horizontalement)
         screen.blit(over_text, (SCREEN_WIDTH//2 - over_text.get_width()//2, SCREEN_HEIGHT//2 - 60))
         screen.blit(score_final, (SCREEN_WIDTH//2 - score_final.get_width()//2, SCREEN_HEIGHT//2 + 20))
+        
+        # Afficher l'écran pendant 1.5 secondes
         pygame.display.flip()
         pygame.time.delay(1500)
-        # Retour au menu
+        
+        # === RETOUR AU MENU PRINCIPAL ===
         game_state = "MENU"
-        # Reset léger, le plein reset se fera quand on clique "Jouer"
-        lives = 3
-        score = 0
-        projectiles = []
-        particles = []
-        level_transition_active = False
+        # === RÉINITIALISATION PARTIELLE DES VARIABLES ===
+        # Note: le reset complet se fera quand on clique "Jouer"
+        lives = 3  # Réinitialiser les vies
+        score = 0  # Réinitialiser le score
+        projectiles = []  # Vider les projectiles
+        particles = []  # Vider les particules
+        level_transition_active = False  # Réinitialiser le système de transition
         level_transition_next_idx = None
         level_transition_phase = "fade_out"
         level_transition_timer = 0.0
 
-    draw_tutorial_overlay()
-    pygame.display.flip()
-    dt = clock.tick(FPS) / 1000
+    # === AFFICHAGE DU TUTORIEL ===
+    draw_tutorial_overlay()  # Dessiner le panneau de tutoriel si visible
+    
+    # === MISE À JOUR DE L'AFFICHAGE ===
+    pygame.display.flip()  # Afficher le buffer à l'écran
+    dt = clock.tick(FPS) / 1000  # Limiter le FPS et obtenir le delta time
 
-pygame.quit()
+# === FIN DE LA BOUCLE PRINCIPALE ===
+pygame.quit()  # Quitter pygame proprement

@@ -34,7 +34,8 @@ BLOCS = {
     "pierre": {"texture": 'assets/texture/stone.png'},
     "brique": {"texture": 'assets/texture/dirt.png'},
     "eau": {"texture": 'assets/texture/dirt.png'},
-    "spawn": {"texture": 'assets/texture/dirt.png'}
+    "spawn": {"texture": 'assets/texture/dirt.png'},
+    "end_level": {"texture": 'assets/texture/dirt.png'}
 }
 
 

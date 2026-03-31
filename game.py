@@ -1,9 +1,10 @@
-import pygame
-import random
-import math
 import json
+import math
 import os
+import random
 from copy import deepcopy
+
+import pygame
 
 # === Initialisation ===
 pygame.init()
@@ -124,7 +125,7 @@ def load_tutorial_texts():
     return texts
 
 def load_tutorial_image():
-    tutoriel_dir = os.path.join(os.path.dirname(__file__), "tutoriel")
+    tutoriel_dir = os.path.join(os.path.dirname(__file__), "assets/tutoriel")
     image_path = os.path.join(tutoriel_dir, "photo.png")
     if os.path.isfile(image_path):
         try:
@@ -635,13 +636,13 @@ is_played = True
 level_name = ""
 
 # Variable d'effet du son
-jump = pygame.mixer.Sound('jump.wav')
+jump = pygame.mixer.Sound('assets/sound/jump.wav')
 
 # Initialisation du mélangeur audio
 pygame.mixer.init()
 
 # Initialisation de la musique
-pygame.mixer.music.load("themes\\main-theme.mp3")
+pygame.mixer.music.load("assets/music/main-theme.mp3")
 pygame.mixer.music.play(-1)
 
 while running:
@@ -649,12 +650,12 @@ while running:
     cnt2 += 1
     if level_name == "pas de sol" and is_played:
         pygame.mixer.music.stop()
-        pygame.mixer.music.load("themes\\boss-theme.mp3")
+        pygame.mixer.music.load("assets/music/boss-theme.mp3")
         pygame.mixer.music.play(-1)
         is_played = False
     elif level_name != "pas de sol" and not is_played:
         pygame.mixer.music.stop()
-        pygame.mixer.music.load("themes\\main-theme.mp3")
+        pygame.mixer.music.load("assets/music/main-theme.mp3")
         pygame.mixer.music.play(-1)
         is_played = True
     # Boutons du menu (recalculés à chaque frame pour simplicité)
@@ -1183,17 +1184,17 @@ while running:
     if not is_invulnerable or int(invuln_timer * 10) % 2 == 0:
         if moving:
             if cnt < 5:
-                movement = "perso.png"
+                movement = "assets/texture/perso.png"
             elif cnt < 9:
-                movement = "perso2.png"
+                movement = "assets/texture/perso2.png"
             elif cnt < 13:
-                movement = "perso3.png"
+                movement = "assets/texture/perso3.png"
             elif cnt < 17:
-                movement = "perso4.png"
+                movement = "assets/texture/perso4.png"
             elif cnt > 16:
                 cnt = 0
         else:
-            movement = "perso.png"
+            movement = "assets/texture/perso.png"
         # Chargement et définition les coordonnées de départ pour l'image
         image = load_image(movement)
         image = pygame.transform.scale(image, (image.get_width()*2, image.get_height()*2))
@@ -1226,7 +1227,7 @@ while running:
         monster_color = (255, 220, 220) if monster["hit_flash"] > 0 else base_colors.get(monster["type"], (220, 20, 20))
 
         if monster["type"] == "tank":
-            image = load_image('monster2.webp')
+            image = load_image('assets/texture/monster2.webp')
             if monster["dir"] == -1:
                 image = pygame.transform.flip(image, True, False)
             image = pygame.transform.scale(image, (image.get_width()*3, image.get_height()*3))
@@ -1236,7 +1237,7 @@ while running:
             # Dessiner l'image
             screen.blit(image, image_rect)
         elif monster["type"] == "fast":
-            image = load_image('monster1.png')
+            image = load_image('assets/texture/monster1.png')
             if monster["dir"] == -1:
                 image = pygame.transform.flip(image, True, False)
             image_rect = pygame.Rect(monster_screen[0]-image.get_width()/3, monster_screen[1]-image.get_height()/3, 40, 40)
@@ -1246,17 +1247,17 @@ while running:
             screen.blit(image, image_rect)
         else:  # flyer
             if cnt2 < 5:
-                monster["anim"] = 'monsterb1.png'
+                monster["anim"] = 'assets/texture/monsterb1.png'
             elif cnt2 < 9:
-                monster["anim"] = 'monsterb2.webp'
+                monster["anim"] = 'assets/texture/monsterb2.webp'
             elif cnt2 < 13:
-                monster["anim"] = 'monsterb3.png'
+                monster["anim"] = 'assets/texture/monsterb3.png'
             elif cnt2 < 17:
-                monster["anim"] = 'monsterb4.webp'
+                monster["anim"] = 'assets/texture/monsterb4.webp'
             elif cnt2 < 21:
-                monster["anim"] = 'monsterb5.webp'
+                monster["anim"] = 'assets/texture/monsterb5.webp'
             elif cnt2 > 20:
-                monster["anim"] = 'monsterb1.png'
+                monster["anim"] = 'assets/texture/monsterb1.png'
                 cnt2 = 0
             image = load_image(monster["anim"])
             if monster["dir"] == 1:

@@ -249,6 +249,8 @@ SCREEN_WIDTH, SCREEN_HEIGHT = screen.get_size()
 GROUND_Y = 680
 GROUND_START_X = 0
 GROUND_END_X = 3000
+TILE_SIZE = 40
+SOLID_BLOCK_TYPES = {"herbe", "terre", "pierre", "brique"}
 
 GRAVITY = 800
 JUMP_FORCE = -600
@@ -534,28 +536,77 @@ def instantiate_level_enemies():
 # === Multi-niveaux: chargement levels.json et application d'un niveau ===
 def _default_level():
     return {
-        "name": "Niveau 1",
-        "ground": {"y": 0, "start_x": 0, "end_x": 10000},
-        "spawn": {"x": 40, "y": -40},
-        "goal": {"x": 1000, "y": -110, "w": 70, "h": 110},
-        "platforms": [],
+        "name": "Défaut",
+        "blocs": [
+            {
+                "x": 280,
+                "y": 280,
+                "type": "herbe"
+            },
+            {
+                "x": 320,
+                "y": 280,
+                "type": "herbe"
+            },
+            {
+                "x": 400,
+                "y": 280,
+                "type": "herbe"
+            },
+            {
+                "x": 440,
+                "y": 280,
+                "type": "herbe"
+            },
+            {
+                "x": 480,
+                "y": 280,
+                "type": "herbe"
+            },
+            {
+                "x": 280,
+                "y": 200,
+                "type": "spawn"
+            },
+            {
+                "x": 480,
+                "y": 240,
+                "type": "end_level"
+            }
+        ],
     }
 
 levels = []
 levels_dir = os.path.dirname(__file__)
-level_filenames = ["levels.json"]  # support ancien et nouveau nommage
-for name in level_filenames:
-    level_path = os.path.join(levels_dir, name)
-    if not os.path.isfile(level_path):
-        continue
+
+# 1) Ancien format: un fichier levels.json avec une liste "levels"
+level_path = os.path.join(levels_dir, "levels.json")
+if os.path.isfile(level_path):
     try:
         with open(level_path, "r", encoding="utf-8") as f:
             data = json.load(f)
             if isinstance(data, dict) and isinstance(data.get("levels"), list) and data["levels"]:
                 levels = data["levels"]
-                break
     except Exception:
-        continue
+        pass
+
+# 2) Nouveau format: fichiers individuels dans levels/*.json avec "blocks" ou "blocs"
+if not levels:
+    levels_folder = os.path.join(levels_dir, "levels")
+    if os.path.isdir(levels_folder):
+        for filename in sorted(os.listdir(levels_folder)):
+            if not filename.lower().endswith(".json"):
+                continue
+            file_path = os.path.join(levels_folder, filename)
+            try:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            except Exception:
+                continue
+            if isinstance(data, dict) and (isinstance(data.get("blocks"), list) or isinstance(data.get("blocs"), list)):
+                if "name" not in data:
+                    data["name"] = os.path.splitext(filename)[0]
+                levels.append(data)
 
 if not levels:
     levels = [_default_level()]
@@ -563,6 +614,7 @@ if not levels:
 selected_level_idx = 0
 
 platforms = []
+use_block_ground = False
 goal_rect = pygame.Rect(0, 0, 0, 0)
 spawn_point = pygame.Vector2(0, 0)
 
@@ -574,27 +626,80 @@ def load_image(img_name: str):
         pygame.quit()
     return loaded_img
 
+def _extract_level_blocks(level):
+    blocks = level.get("blocks")
+    if isinstance(blocks, list):
+        return blocks
+    blocks = level.get("blocs")
+    if isinstance(blocks, list):
+        return blocks
+    return []
+
+def get_block_coordinates(blocks, filter: str | None = None):
+    if filter is None:
+        return [(int(b.get("x", 0)), int(b.get("y", 0))) for b in blocks]
+    return [(int(b.get("x", 0)), int(b.get("y", 0))) for b in blocks if b.get("type") == filter]
+
 def apply_level(level):
-    global GROUND_Y, GROUND_START_X, GROUND_END_X, platforms, goal_rect, spawn_point, level_enemy_configs
-    # Sol
-    GROUND_Y = int(level.get("ground", {}).get("y", GROUND_Y))
-    GROUND_START_X = int(level.get("ground", {}).get("start_x", GROUND_START_X))
-    GROUND_END_X = int(level.get("ground", {}).get("end_x", GROUND_END_X))
-    # Plateformes
-    platforms = [
-        pygame.Rect(int(p.get("x", 0)), int(p.get("y", 0)), int(p.get("w", 0)), int(p.get("h", 0)))
-        for p in level.get("platforms", [])
-    ]
-    # Porte/objectif
-    g = level.get("goal", {})
-    goal_rect.x = int(g.get("x", 2300))
-    goal_rect.y = int(g.get("y", -30))
-    goal_rect.w = int(g.get("w", 70))
-    goal_rect.h = int(g.get("h", 110))
-    # Spawn
-    s = level.get("spawn", {})
-    spawn_point.update(float(s.get("x", SCREEN_WIDTH / 2)), float(s.get("y", GROUND_Y - (head_radius + body_height + leg_height))))
-    # Ennemis
+    global GROUND_Y, GROUND_START_X, GROUND_END_X, DEATH_BELOW_Y
+    global goal_rect, spawn_point, level_enemy_configs, platforms, use_block_ground
+
+    blocks = _extract_level_blocks(level)
+    use_block_ground = bool(blocks)
+
+    if use_block_ground:
+        solid_rects = []
+        for b in blocks:
+            if b.get("type") in SOLID_BLOCK_TYPES:
+                bx = int(b.get("x", 0))
+                by = int(b.get("y", 0))
+                solid_rects.append(pygame.Rect(bx, by, TILE_SIZE, TILE_SIZE))
+        platforms = solid_rects
+
+        if solid_rects:
+            GROUND_START_X = min(r.left for r in solid_rects)
+            GROUND_END_X = max(r.right for r in solid_rects)
+            GROUND_Y = max(r.bottom for r in solid_rects)
+            DEATH_BELOW_Y = GROUND_Y + 1500
+
+        g = get_block_coordinates(blocks, "end_level")
+        if g:
+            goal_rect.update(int(g[0][0]), int(g[0][1]), TILE_SIZE, TILE_SIZE)
+
+        s = get_block_coordinates(blocks, "spawn")
+        if s:
+            spawn_point.update(float(s[0][0]), float(s[0][1]))
+    else:
+        ground = level.get("ground", {})
+        GROUND_Y = int(ground.get("y", GROUND_Y))
+        GROUND_START_X = int(ground.get("start_x", GROUND_START_X))
+        GROUND_END_X = int(ground.get("end_x", GROUND_END_X))
+        DEATH_BELOW_Y = GROUND_Y + 1500
+
+        g = level.get("goal", {})
+        goal_rect.update(
+            int(g.get("x", goal_rect.x)),
+            int(g.get("y", goal_rect.y)),
+            int(g.get("w", 70)),
+            int(g.get("h", 110)),
+        )
+
+        s = level.get("spawn", {})
+        spawn_point.update(float(s.get("x", spawn_point.x)), float(s.get("y", spawn_point.y)))
+
+        raw_platforms = level.get("platforms", [])
+        platforms = []
+        for plat in raw_platforms:
+            if isinstance(plat, dict):
+                platforms.append(
+                    pygame.Rect(
+                        int(plat.get("x", 0)),
+                        int(plat.get("y", 0)),
+                        int(plat.get("w", 0)),
+                        int(plat.get("h", 0)),
+                    )
+                )
+
     level_enemy_configs = []
     raw_enemies = level.get("enemies", [])
     if isinstance(raw_enemies, list):
@@ -889,8 +994,8 @@ while running:
     # Détection sol/plateforme
     feet_y = player_pos.y + head_radius + body_height + leg_height
     on_ground = False
-    # Sol infini limité en X
-    if feet_y >= GROUND_Y - 0.1 and GROUND_START_X <= player_pos.x <= GROUND_END_X:
+    # Sol infini limité en X (mode ancien format)
+    if (not use_block_ground) and feet_y >= GROUND_Y - 0.1 and GROUND_START_X <= player_pos.x <= GROUND_END_X:
         on_ground = True
     else:
         for plat in platforms:
@@ -943,7 +1048,7 @@ while running:
     player_pos.y += player_vel_y * dt
 
     feet_y = player_pos.y + head_radius + body_height + leg_height
-    if feet_y > GROUND_Y and GROUND_START_X <= player_pos.x <= GROUND_END_X:
+    if (not use_block_ground) and feet_y > GROUND_Y and GROUND_START_X <= player_pos.x <= GROUND_END_X:
         player_pos.y = GROUND_Y - (head_radius + body_height + leg_height)
         player_vel_y = 0
 
@@ -976,7 +1081,9 @@ while running:
 
     if not prev_on_ground and on_ground and player_vel_y == 0:
         feet_x = player_pos.x
-        feet_y = GROUND_Y if feet_y >= GROUND_Y else player_pos.y + head_radius + body_height + leg_height
+        feet_y = player_pos.y + head_radius + body_height + leg_height
+        if (not use_block_ground) and feet_y >= GROUND_Y:
+            feet_y = GROUND_Y
         create_particles((feet_x, feet_y), (180, 180, 180), 10)
     prev_on_ground = on_ground
 
@@ -1067,9 +1174,9 @@ while running:
             monster["vel_y"] += GRAVITY * dt
             monster["pos"].y += monster["vel_y"] * dt
 
-            # Collision sol
+            # Collision sol (mode ancien format)
             feet_y = monster["pos"].y + monster["radius"]
-            if feet_y > GROUND_Y:
+            if (not use_block_ground) and feet_y > GROUND_Y:
                 monster["pos"].y = GROUND_Y - monster["radius"]
                 monster["vel_y"] = 0
 
@@ -1118,8 +1225,7 @@ while running:
 
     # Victoire
     if (not victory and not level_transition_active and
-        pygame.Rect(int(player_pos.x - head_radius), int(player_pos.y - head_radius),
-                    head_radius*2, head_radius*2).colliderect(goal_rect)):
+        player_rect.colliderect(goal_rect)):
         hide_tutorial()
         if selected_level_idx < len(levels) - 1:
             level_transition_active = True
@@ -1140,23 +1246,27 @@ while running:
         )
         pygame.draw.line(screen, color, (0, i), (SCREEN_WIDTH, i))
 
-    # Sol avec texture
-    ground_rect = pygame.Rect(GROUND_START_X - camera_offset.x, GROUND_Y - camera_offset.y, GROUND_END_X - GROUND_START_X, 100)
-    pygame.draw.rect(screen, GROUND_COLOR, ground_rect)
-    pygame.draw.rect(screen, (25, 100, 25), ground_rect, 3)
-    for i in range(0, 3000, 50):
-        pygame.draw.line(screen, (44, 160, 44),
-                        (i - camera_offset.x, GROUND_Y - camera_offset.y),
-                        (i - camera_offset.x, GROUND_Y - camera_offset.y + 100), 2)
+    # Sol avec texture (mode ancien format)
+    if not use_block_ground:
+        ground_rect = pygame.Rect(GROUND_START_X - camera_offset.x, GROUND_Y - camera_offset.y, GROUND_END_X - GROUND_START_X, 100)
+        pygame.draw.rect(screen, GROUND_COLOR, ground_rect)
+        pygame.draw.rect(screen, (25, 100, 25), ground_rect, 3)
+        for i in range(0, 3000, 50):
+            pygame.draw.line(screen, (44, 160, 44),
+                            (i - camera_offset.x, GROUND_Y - camera_offset.y),
+                            (i - camera_offset.x, GROUND_Y - camera_offset.y + 100), 2)
 
     # Plateformes avec relief
     for plat in platforms:
         plat_rect_screen = plat.move(-camera_offset.x, -camera_offset.y)
         pygame.draw.rect(screen, PLATFORM_COLOR, plat_rect_screen)
-        pygame.draw.rect(screen, PLATFORM_HIGHLIGHT, plat_rect_screen, 3)
-        pygame.draw.line(screen, (80, 50, 20),
-                        (plat_rect_screen.left, plat_rect_screen.top + 5),
-                        (plat_rect_screen.right, plat_rect_screen.top + 5), 2)
+        if use_block_ground:
+            pygame.draw.rect(screen, PLATFORM_HIGHLIGHT, plat_rect_screen, 1)
+        else:
+            pygame.draw.rect(screen, PLATFORM_HIGHLIGHT, plat_rect_screen, 3)
+            pygame.draw.line(screen, (80, 50, 20),
+                            (plat_rect_screen.left, plat_rect_screen.top + 5),
+                            (plat_rect_screen.right, plat_rect_screen.top + 5), 2)
 
     # Porte avec détails
     goal_rect_screen = goal_rect.move(-camera_offset.x, -camera_offset.y)
@@ -1347,7 +1457,7 @@ while running:
                 invuln_timer = 0.0
                 camera_offset.x = player_pos.x - SCREEN_WIDTH // 2
                 camera_offset.y = player_pos.y - SCREEN_HEIGHT // 2
-                start_tutorial
+                start_tutorial()
                 level_transition_phase = "fade_in"
                 level_transition_timer = 0.0
                 overlay_alpha = 255

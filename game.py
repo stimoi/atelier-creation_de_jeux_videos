@@ -268,7 +268,7 @@ DASH_DURATION = 0.2
 FPS = 60
 MAX_MONSTERS = 3
 MONSTER_SPAWN_COOLDOWN = 2.0  # Secondes entre chaque spawn
-DEATH_BELOW_Y = GROUND_Y + 1500
+DEATH_BELOW_Y = 2000
 
 # === Caméra ===
 camera_offset = pygame.Vector2(0, 0)
@@ -635,7 +635,7 @@ def _extract_level_blocks(level):
         return blocks
     return []
 
-def get_block_coordinates(blocks, filter: str | None = None):
+def get_block_coordinates(blocks, filter: str or None = None):
     if filter is None:
         return [(int(b.get("x", 0)), int(b.get("y", 0))) for b in blocks]
     return [(int(b.get("x", 0)), int(b.get("y", 0))) for b in blocks if b.get("type") == filter]
@@ -719,6 +719,7 @@ lives = 3
 invuln_time = 1.5
 invuln_timer = 0.0
 is_invulnerable = False
+inverted_gravity = False
 victory = False
 
 LEVEL_TRANSITION_FADE_OUT = 0.6
@@ -991,6 +992,11 @@ while running:
     else:
         walk_cycle = 0
 
+    if keys[pygame.K_g]:
+        inverted_gravity = True
+    elif inverted_gravity and not keys[pygame.K_g]:
+        inverted_gravity = False
+
     # Détection sol/plateforme
     feet_y = player_pos.y + head_radius + body_height + leg_height
     on_ground = False
@@ -1047,9 +1053,17 @@ while running:
     player_vel_y += GRAVITY * dt
     player_pos.y += player_vel_y * dt
 
+    if (inverted_gravity and GRAVITY > 0) or (not inverted_gravity and GRAVITY < 0):
+        GRAVITY = -GRAVITY
+        JUMP_FORCE = -JUMP_FORCE
+        DEATH_BELOW_Y = -DEATH_BELOW_Y
+
     feet_y = player_pos.y + head_radius + body_height + leg_height
-    if (not use_block_ground) and feet_y > GROUND_Y and GROUND_START_X <= player_pos.x <= GROUND_END_X:
+    if not inverted_gravity and (not use_block_ground) and feet_y > GROUND_Y and GROUND_START_X <= player_pos.x <= GROUND_END_X:
         player_pos.y = GROUND_Y - (head_radius + body_height + leg_height)
+        player_vel_y = 0
+    elif inverted_gravity and (not use_block_ground) and feet_y < GROUND_Y+128 and GROUND_START_X <= player_pos.x <= GROUND_END_X:
+        player_pos.y = GROUND_Y + 128 + (head_radius + body_height + leg_height)
         player_vel_y = 0
 
     player_rect = pygame.Rect(int(player_pos.x - head_radius), int(player_pos.y - head_radius),
@@ -1096,7 +1110,7 @@ while running:
     if shoot_recoil > 0:
         shoot_recoil -= dt
 
-    if player_pos.y > DEATH_BELOW_Y:
+    if (not inverted_gravity and player_pos.y > DEATH_BELOW_Y) or (inverted_gravity and player_pos.y < DEATH_BELOW_Y):
         lives -= 1
         is_invulnerable = True
         invuln_timer = invuln_time
@@ -1501,6 +1515,10 @@ while running:
         level_transition_timer = 0.0
 
     if lives <= 0:
+        inverted_gravity = False
+        GRAVITY = -GRAVITY
+        JUMP_FORCE = -JUMP_FORCE
+        DEATH_BELOW_Y = -DEATH_BELOW_Y
         overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
         overlay.fill((0, 0, 0, 200))
         screen.blit(overlay, (0, 0))

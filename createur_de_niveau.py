@@ -3,6 +3,7 @@ import json
 import sys
 import tkinter as tk
 from tkinter import filedialog
+from blocs import BLOCS
 
 # On initialise tkinter et on cache sa fenêtre principale
 root = tk.Tk()
@@ -25,20 +26,6 @@ VITESSE_CAMERA = 12
 # Création de la fenêtre
 ecran = pygame.display.set_mode((LARGEUR_FENETRE, HAUTEUR_FENETRE))
 pygame.display.set_caption("Mon Super Mario Maker - Python Édition")
-
-# --- DEFINITION DES BLOCS (Notre Palette) ---
-# Chaque bloc a un nom et une couleur (Rouge, Vert, Bleu)
-BLOCS = {
-    "herbe": {"texture": 'assets/texture/grass.png'},
-    "terre": {"texture": 'assets/texture/dirt.png'},
-    "pierre": {"texture": 'assets/texture/stone.png'},
-    "brique": {"texture": 'assets/texture/bricks.png'},
-    "eau": {"texture": 'assets/texture/water.png'},
-    "lave": {"texture": 'assets/texture/lava.png'},
-    "spawn": {"texture": 'assets/texture/spawn.png'},
-    "end_level": {"texture": 'assets/texture/end_level.png'}
-}
-
 
 def charger_textures_blocs():
     """Charge les images définies dans BLOCS et les redimensionne à la taille d'une case."""

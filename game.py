@@ -143,7 +143,6 @@ def load_tutorial_image():
 tutorial_texts = load_tutorial_texts()
 tutorial_image = load_tutorial_image()
 
-
 def select_tutorial_for_level(level):
     global current_tutorial_texts, tutorial_visible, tutorial_index
     if not level:
@@ -159,7 +158,6 @@ def select_tutorial_for_level(level):
     current_tutorial_texts = list(entries)
     tutorial_index = 0
     tutorial_visible = False
-
 
 def draw_tutorial_overlay():
     global tutorial_button_rect
@@ -393,10 +391,8 @@ def draw_shadow(center_x, feet_y_world, max_radius):
 
 # === Joueur ===
 player_pos = pygame.Vector2(SCREEN_WIDTH / 2, GROUND_Y)
-head_radius = 20
-body_height = 40
-leg_height = 30
-arm_length = 25
+player_width = 14*2
+player_height = 32*2
 
 player_vel_y = 0
 direction = 1
@@ -414,7 +410,7 @@ dash_was_pressed = False
 dash_timer = 0.0
 dash_direction = 1
 
-player_pos.y = GROUND_Y - (head_radius + body_height + leg_height)
+player_pos.y = GROUND_Y - player_height
 spawn_point = player_pos
 
 # === Projectiles ===
@@ -846,8 +842,8 @@ while running:
                     dir_x = dx / distance
                     dir_y = dy / distance
 
-                    proj_x = player_pos.x + dir_x * (head_radius + 10)
-                    proj_y = player_pos.y + dir_y * (head_radius + 10)
+                    proj_x = player_pos.x + dir_x * (player_width / 2 + 10)
+                    proj_y = player_pos.y + dir_y * (player_height / 2 + 10)
 
                     projectiles.append({
                         "pos": pygame.Vector2(proj_x, proj_y),
@@ -1017,11 +1013,11 @@ while running:
         dash_timer = max(0.0, dash_timer - dt)
 
     player_pos.x += dx
-    player_pos.x = max(head_radius, player_pos.x)
+    player_pos.x = max(player_width / 2, player_pos.x)
 
     # Collisions en X
-    player_rect = pygame.Rect(int(player_pos.x - head_radius), int(player_pos.y - head_radius),
-                              head_radius*2, head_radius*2 + body_height + leg_height)
+    player_rect = pygame.Rect(int(player_pos.x - player_width / 2), int(player_pos.y - player_height / 2),
+                              player_width, player_height)
     if use_block_ground:
         for obj in platforms:
             plat = obj["rect"]
@@ -1044,8 +1040,8 @@ while running:
     player_pos.y += dy
 
     # Collisions en Y
-    player_rect = pygame.Rect(int(player_pos.x - head_radius), int(player_pos.y - head_radius),
-                              head_radius*2, head_radius*2 + body_height + leg_height)
+    player_rect = pygame.Rect(int(player_pos.x - player_width / 2), int(player_pos.y - player_height / 2),
+                              player_width, player_height)
     on_ground = False
     
     if use_block_ground:
@@ -1054,21 +1050,21 @@ while running:
             if player_rect.colliderect(plat):
                 if dy > 0:
                     player_rect.bottom = plat.top
-                    player_pos.y = player_rect.top + head_radius
+                    player_pos.y = player_rect.centerx if False else player_rect.centery
                     player_vel_y = 0
                     on_ground = True
                 elif dy < 0:
                     player_rect.top = plat.bottom
-                    player_pos.y = player_rect.top + head_radius
+                    player_pos.y = player_rect.centery
                     player_vel_y = 0
     else:
-        feet_y = player_pos.y + head_radius + body_height + leg_height
+        feet_y = player_pos.y + player_height / 2
         if not inverted_gravity and feet_y > GROUND_Y and GROUND_START_X <= player_pos.x <= GROUND_END_X:
-            player_pos.y = GROUND_Y - (head_radius + body_height + leg_height)
+            player_pos.y = GROUND_Y - player_height / 2
             player_vel_y = 0
             on_ground = True
         elif inverted_gravity and feet_y < GROUND_Y+128 and GROUND_START_X <= player_pos.x <= GROUND_END_X:
-            player_pos.y = GROUND_Y + 128 + (head_radius + body_height + leg_height)
+            player_pos.y = GROUND_Y + 128 + player_height / 2
             player_vel_y = 0
             on_ground = True
 
@@ -1116,7 +1112,7 @@ while running:
 
     if not prev_on_ground and on_ground and player_vel_y == 0:
         feet_x = player_pos.x
-        feet_y = player_pos.y + head_radius + body_height + leg_height
+        feet_y = player_pos.y + player_height / 2
         if (not use_block_ground) and feet_y >= GROUND_Y:
             feet_y = GROUND_Y
         create_particles((feet_x, feet_y), (180, 180, 180), 10)
@@ -1334,12 +1330,6 @@ while running:
         pygame.draw.circle(screen, (30, 30, 30), knob_pos, 6)
         pygame.draw.circle(screen, (80, 80, 80), knob_pos, 3)
 
-    # Ombres
-    player_feet = player_pos.y + head_radius + body_height + leg_height
-    ## draw_shadow(player_pos.x, player_feet, head_radius + 12)
-    ## for monster in monsters:
-    ##    draw_shadow(monster["pos"].x, monster["pos"].y + monster["radius"], monster["radius"])
-
     # Joueur
     p_center_screen = (int(player_pos.x - camera_offset.x), int(player_pos.y - camera_offset.y))
     moving_now = keys[pygame.K_q] or keys[pygame.K_LEFT] or keys[pygame.K_d] or keys[pygame.K_RIGHT]
@@ -1362,10 +1352,13 @@ while running:
             movement = "assets/texture/perso.png"
         # Chargement et définition les coordonnées de départ pour l'image
         image = load_image(movement)
-        image = pygame.transform.scale(image, (image.get_width()*2, image.get_height()*2))
+        image = pygame.transform.scale(image, (player_width, player_height))
         if direction == -1:
             image = pygame.transform.flip(image, True, False)
-        image_rect = pygame.Rect(p_center_screen[0]-image.get_width()/2, p_center_screen[1]+image.get_height()/2, -40, -40)
+        
+        # On aligne le bas de l'image (le sprite) avec le bas de la hitbox
+        bottom_y = render_center[1] + player_height / 2
+        image_rect = image.get_rect(midbottom=(render_center[0], bottom_y))
 
         # Dessiner l'image
         screen.blit(image, image_rect)

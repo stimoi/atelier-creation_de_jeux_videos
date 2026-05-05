@@ -3,7 +3,6 @@ import math
 import os
 import random
 from copy import deepcopy
-from blocs import BLOCS
 
 import pygame
 
@@ -253,19 +252,6 @@ GROUND_END_X = 3000
 TILE_SIZE = 40
 SOLID_BLOCK_TYPES = {"herbe", "terre", "pierre", "brique"}
 
-# --- CHARGEMENT DES TEXTURES DE BLOCS ---
-BLOCK_IMAGES = {}
-for name, infos in BLOCS.items():
-    try:
-        img = pygame.image.load(infos["texture"]).convert_alpha()
-        img = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
-        BLOCK_IMAGES[name] = img
-    except Exception as e:
-        print(f"Erreur de chargement de la texture {name}: {e}")
-        surf = pygame.Surface((TILE_SIZE, TILE_SIZE))
-        surf.fill((255, 0, 255))
-        BLOCK_IMAGES[name] = surf
-
 GRAVITY = 800
 JUMP_FORCE = -600
 MOVE_SPEED = 300
@@ -301,6 +287,7 @@ SHOE_COLOR = (40, 40, 40)
 HAND_COLOR = (255, 220, 177)
 HAIR_COLOR = (60, 40, 20)
 SKIN_COLOR = (255, 220, 177)
+FUEL_COLOR = (200, 50, 0)
 
 # === Particules ===
 particles = []
@@ -405,7 +392,7 @@ blink_timer = 0.0
 blink_close = 0.0
 prev_on_ground = True
 shoot_recoil = 0.0
-stamina = STAMINA_MAX
+stamina = fuel = STAMINA_MAX
 stamina_idle_timer = 0.0
 stamina_regen_timer = 0.0
 air_jumps_left = 1
@@ -547,6 +534,7 @@ def instantiate_level_enemies():
         current_monster_cap = MAX_MONSTERS
     monster_spawn_timer = 0.0
 
+# === Multi-niveaux: chargement levels.json et application d'un niveau ===
 def _default_level():
     return {
         "name": "Défaut",
@@ -591,21 +579,35 @@ def _default_level():
 
 levels = []
 levels_dir = os.path.dirname(__file__)
-levels_folder = os.path.join(levels_dir, "levels")
-if os.path.isdir(levels_folder):
-    for filename in sorted(os.listdir(levels_folder)):
-        if not filename.lower().endswith(".json"):
-            continue
-        file_path = os.path.join(levels_folder, filename)
-        try:
-            with open(file_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-        except Exception:
-            continue
-        if isinstance(data, dict) and (isinstance(data.get("blocks"), list) or isinstance(data.get("blocs"), list)):
-            if "name" not in data:
-                data["name"] = os.path.splitext(filename)[0]
-            levels.append(data)
+
+# 1) Ancien format: un fichier levels.json avec une liste "levels"
+level_path = os.path.join(levels_dir, "levels.json")
+if os.path.isfile(level_path):
+    try:
+        with open(level_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            if isinstance(data, dict) and isinstance(data.get("levels"), list) and data["levels"]:
+                levels = data["levels"]
+    except Exception:
+        pass
+
+# 2) Nouveau format: fichiers individuels dans levels/*.json avec "blocks" ou "blocs"
+if not levels:
+    levels_folder = os.path.join(levels_dir, "levels")
+    if os.path.isdir(levels_folder):
+        for filename in sorted(os.listdir(levels_folder)):
+            if not filename.lower().endswith(".json"):
+                continue
+            file_path = os.path.join(levels_folder, filename)
+            try:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            except Exception:
+                continue
+            if isinstance(data, dict) and (isinstance(data.get("blocks"), list) or isinstance(data.get("blocs"), list)):
+                if "name" not in data:
+                    data["name"] = os.path.splitext(filename)[0]
+                levels.append(data)
 
 if not levels:
     levels = [_default_level()]
@@ -613,7 +615,6 @@ if not levels:
 selected_level_idx = 0
 
 platforms = []
-decorations = []
 use_block_ground = False
 goal_rect = pygame.Rect(0, 0, 0, 0)
 spawn_point = pygame.Vector2(0, 0)
@@ -621,51 +622,45 @@ spawn_point = pygame.Vector2(0, 0)
 def load_image(img_name: str):
     try:
         loaded_img = pygame.image.load(img_name).convert_alpha()
-        return loaded_img
     except pygame.error as e:
         print(f"Impossible de charger l'image : {e}")
-        return pygame.Surface((40, 40))
+        pygame.quit()
+    return loaded_img
 
 def _extract_level_blocks(level):
+    blocks = level.get("blocks")
+    if isinstance(blocks, list):
+        return blocks
     blocks = level.get("blocs")
     if isinstance(blocks, list):
         return blocks
     return []
 
-def get_block_coordinates(blocks, filter_type=None):
-    if filter_type is None:
+def get_block_coordinates(blocks, filter: str or None = None):
+    if filter is None:
         return [(int(b.get("x", 0)), int(b.get("y", 0))) for b in blocks]
-    return [(int(b.get("x", 0)), int(b.get("y", 0))) for b in blocks if b.get("type") == filter_type]
+    return [(int(b.get("x", 0)), int(b.get("y", 0))) for b in blocks if b.get("type") == filter]
 
 def apply_level(level):
     global GROUND_Y, GROUND_START_X, GROUND_END_X, DEATH_BELOW_Y
-    global goal_rect, spawn_point, level_enemy_configs, platforms, decorations, use_block_ground
+    global goal_rect, spawn_point, level_enemy_configs, platforms, use_block_ground
 
     blocks = _extract_level_blocks(level)
     use_block_ground = bool(blocks)
 
     if use_block_ground:
-        solid_objs = []
-        decor_objs = []
+        solid_rects = []
         for b in blocks:
-            b_type = b.get("type")
-            if b_type in SOLID_BLOCK_TYPES:
+            if b.get("type") in SOLID_BLOCK_TYPES:
                 bx = int(b.get("x", 0))
                 by = int(b.get("y", 0))
-                rect = pygame.Rect(bx, by, TILE_SIZE, TILE_SIZE)
-                solid_objs.append({"rect": rect, "type": b_type})
-            elif b_type in ["eau", "lave"]:
-                bx = int(b.get("x", 0))
-                by = int(b.get("y", 0))
-                rect = pygame.Rect(bx, by, TILE_SIZE, TILE_SIZE)
-                decor_objs.append({"rect": rect, "type": b_type})
-        platforms = solid_objs
-        decorations = decor_objs
+                solid_rects.append(pygame.Rect(bx, by, TILE_SIZE, TILE_SIZE))
+        platforms = solid_rects
 
-        if solid_objs:
-            GROUND_START_X = min(obj["rect"].left for obj in solid_objs)
-            GROUND_END_X = max(obj["rect"].right for obj in solid_objs)
-            GROUND_Y = max(obj["rect"].bottom for obj in solid_objs)
+        if solid_rects:
+            GROUND_START_X = min(r.left for r in solid_rects)
+            GROUND_END_X = max(r.right for r in solid_rects)
+            GROUND_Y = max(r.bottom for r in solid_rects)
             DEATH_BELOW_Y = GROUND_Y + 1500
 
         g = get_block_coordinates(blocks, "end_level")
@@ -693,6 +688,19 @@ def apply_level(level):
         s = level.get("spawn", {})
         spawn_point.update(float(s.get("x", spawn_point.x)), float(s.get("y", spawn_point.y)))
 
+        raw_platforms = level.get("platforms", [])
+        platforms = []
+        for plat in raw_platforms:
+            if isinstance(plat, dict):
+                platforms.append(
+                    pygame.Rect(
+                        int(plat.get("x", 0)),
+                        int(plat.get("y", 0)),
+                        int(plat.get("w", 0)),
+                        int(plat.get("h", 0)),
+                    )
+                )
+
     level_enemy_configs = []
     raw_enemies = level.get("enemies", [])
     if isinstance(raw_enemies, list):
@@ -700,9 +708,6 @@ def apply_level(level):
             if isinstance(entry, dict):
                 level_enemy_configs.append(deepcopy(entry))
     select_tutorial_for_level(level)
-
-def event_handler(event: str):
-  pass
 
 # Appliquer le niveau initial
 apply_level(levels[selected_level_idx])
@@ -715,7 +720,7 @@ lives = 3
 invuln_time = 1.5
 invuln_timer = 0.0
 is_invulnerable = False
-inverted_gravity = False
+use_jetpack = False
 victory = False
 
 LEVEL_TRANSITION_FADE_OUT = 0.6
@@ -972,17 +977,14 @@ while running:
     # Mouvements
     stamina_idle_timer += dt
     keys = pygame.key.get_pressed()
-    
-    # 1. Mouvement en X
     moving = False
-    dx = 0
     if keys[pygame.K_q] or keys[pygame.K_LEFT]:
-        dx -= MOVE_SPEED * dt
+        player_pos.x -= MOVE_SPEED * dt
         flip = True
         direction = -1
         moving = True
     if keys[pygame.K_d] or keys[pygame.K_RIGHT]:
-        dx += MOVE_SPEED * dt
+        player_pos.x += MOVE_SPEED * dt
         flip = False
         direction = 1
         moving = True
@@ -991,94 +993,23 @@ while running:
     else:
         walk_cycle = 0
 
-    if keys[pygame.K_g]:
-        inverted_gravity = True
-    elif inverted_gravity and not keys[pygame.K_g]:
-        inverted_gravity = False
+    if keys[pygame.K_j] and fuel > 0:
+        use_jetpack = True
+    elif fuel <= 0 or (use_jetpack and not keys[pygame.K_j]):
+        use_jetpack = False
 
-    dash_pressed = keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT]
-    if dash_pressed and not dash_was_pressed and dash_timer <= 0 and stamina >= DASH_COST:
-        desired_dir = 0
-        if keys[pygame.K_q] or keys[pygame.K_LEFT]:
-            desired_dir = -1
-        elif keys[pygame.K_d] or keys[pygame.K_RIGHT]:
-            desired_dir = 1
-        else:
-            desired_dir = direction
-        if desired_dir != 0:
-            dash_direction = desired_dir
-            dash_timer = DASH_DURATION
-            stamina = max(0, stamina - DASH_COST)
-            stamina_idle_timer = 0.0
-            stamina_regen_timer = 0.0
-
-    if dash_timer > 0:
-        dx += dash_direction * DASH_SPEED * dt
-        dash_timer = max(0.0, dash_timer - dt)
-
-    player_pos.x += dx
-    player_pos.x = max(head_radius, player_pos.x)
-
-    # Collisions en X
-    player_rect = pygame.Rect(int(player_pos.x - head_radius), int(player_pos.y - head_radius),
-                              head_radius*2, head_radius*2 + body_height + leg_height)
-    if use_block_ground:
-        for obj in platforms:
-            plat = obj["rect"]
-            if player_rect.colliderect(plat):
-                if dx > 0:
-                    player_rect.right = plat.left
-                    player_pos.x = player_rect.centerx
-                elif dx < 0:
-                    player_rect.left = plat.right
-                    player_pos.x = player_rect.centerx
-
-    # 2. Mouvement en Y et Gravité
-    if (inverted_gravity and GRAVITY > 0) or (not inverted_gravity and GRAVITY < 0):
-        GRAVITY = -GRAVITY
-        JUMP_FORCE = -JUMP_FORCE
-        DEATH_BELOW_Y = -DEATH_BELOW_Y
-
-    player_vel_y += GRAVITY * dt
-    dy = player_vel_y * dt
-    player_pos.y += dy
-
-    # Collisions en Y
-    player_rect = pygame.Rect(int(player_pos.x - head_radius), int(player_pos.y - head_radius),
-                              head_radius*2, head_radius*2 + body_height + leg_height)
+    # Détection sol/plateforme
+    feet_y = player_pos.y + head_radius + body_height + leg_height
     on_ground = False
-    
-    if use_block_ground:
-        for obj in platforms:
-            plat = obj["rect"]
-            if player_rect.colliderect(plat):
-                if dy > 0:
-                    player_rect.bottom = plat.top
-                    player_pos.y = player_rect.top + head_radius
-                    player_vel_y = 0
-                    on_ground = True
-                elif dy < 0:
-                    player_rect.top = plat.bottom
-                    player_pos.y = player_rect.top + head_radius
-                    player_vel_y = 0
+    # Sol infini limité en X (mode ancien format)
+    if (not use_block_ground) and feet_y >= GROUND_Y - 0.1 and GROUND_START_X <= player_pos.x <= GROUND_END_X:
+        on_ground = True
     else:
-        feet_y = player_pos.y + head_radius + body_height + leg_height
-        if not inverted_gravity and feet_y > GROUND_Y and GROUND_START_X <= player_pos.x <= GROUND_END_X:
-            player_pos.y = GROUND_Y - (head_radius + body_height + leg_height)
-            player_vel_y = 0
-            on_ground = True
-        elif inverted_gravity and feet_y < GROUND_Y+128 and GROUND_START_X <= player_pos.x <= GROUND_END_X:
-            player_pos.y = GROUND_Y + 128 + (head_radius + body_height + leg_height)
-            player_vel_y = 0
-            on_ground = True
-
-    # Juste vérifier si on est sur le sol même si on ne bouge pas verticalement (pour les platforms)
-    if not on_ground and use_block_ground:
-        feet_rect = player_rect.copy()
-        feet_rect.y += 2 if not inverted_gravity else -2
-        for obj in platforms:
-            if feet_rect.colliderect(obj["rect"]):
+        for plat in platforms:
+            if plat.left - 5 < player_pos.x < plat.right + 5 and abs(feet_y - plat.top) <= 6:
                 on_ground = True
+                player_pos.y = plat.top - (head_radius + body_height + leg_height)
+                player_vel_y = 0
                 break
 
     if on_ground:
@@ -1101,8 +1032,56 @@ while running:
             stamina_regen_timer = 0.0
             air_jumps_left -= 1
 
+    dash_pressed = keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT]
+    if dash_pressed and not dash_was_pressed and dash_timer <= 0 and stamina >= DASH_COST:
+        desired_dir = 0
+        if keys[pygame.K_q] or keys[pygame.K_LEFT]:
+            desired_dir = -1
+        elif keys[pygame.K_d] or keys[pygame.K_RIGHT]:
+            desired_dir = 1
+        else:
+            desired_dir = direction
+        if desired_dir != 0:
+            dash_direction = desired_dir
+            dash_timer = DASH_DURATION
+            stamina = max(0, stamina - DASH_COST)
+            stamina_idle_timer = 0.0
+            stamina_regen_timer = 0.0
+
     jump_was_pressed = space_pressed
     dash_was_pressed = dash_pressed
+
+    player_vel_y += GRAVITY * dt
+    player_pos.y += player_vel_y * dt
+
+    if use_jetpack:
+        fuel -= 0.5
+
+    if (use_jetpack and GRAVITY > 0) or (not use_jetpack and GRAVITY < 0):
+        GRAVITY = -GRAVITY
+        JUMP_FORCE = -JUMP_FORCE
+        DEATH_BELOW_Y = -DEATH_BELOW_Y
+    feet_y = player_pos.y + head_radius + body_height + leg_height
+    if not use_block_ground and feet_y > GROUND_Y and GROUND_START_X <= player_pos.x <= GROUND_END_X:
+        player_pos.y = GROUND_Y - (head_radius + body_height + leg_height)
+        player_vel_y = 0
+
+    player_rect = pygame.Rect(int(player_pos.x - head_radius), int(player_pos.y - head_radius),
+                              head_radius*2, head_radius*2 + body_height + leg_height)
+    if player_vel_y >= 0:
+        for plat in platforms:
+            if player_rect.colliderect(plat):
+                plat_top = plat.top
+                if feet_y - player_vel_y * dt <= plat_top:
+                    player_pos.y = plat_top - (head_radius + body_height + leg_height)
+                    player_vel_y = 0
+                    break
+
+    if dash_timer > 0:
+        player_pos.x += dash_direction * DASH_SPEED * dt
+        dash_timer = max(0.0, dash_timer - dt)
+
+    player_pos.x = max(head_radius, player_pos.x)
 
     if stamina_idle_timer >= STAMINA_REGEN_DELAY and stamina < STAMINA_MAX:
         stamina_regen_timer += dt
@@ -1131,7 +1110,7 @@ while running:
     if shoot_recoil > 0:
         shoot_recoil -= dt
 
-    if (not inverted_gravity and player_pos.y > DEATH_BELOW_Y) or (inverted_gravity and player_pos.y < DEATH_BELOW_Y):
+    if (not use_jetpack and player_pos.y > DEATH_BELOW_Y) or (use_jetpack and player_pos.y < DEATH_BELOW_Y):
         lives -= 1
         is_invulnerable = True
         invuln_timer = invuln_time
@@ -1150,6 +1129,7 @@ while running:
         proj["pos"] += proj["vel"] * dt
         if (proj["pos"].x < camera_offset.x - 200 or proj["pos"].x > camera_offset.x + SCREEN_WIDTH + 200 or
             proj["pos"].y < camera_offset.y - 200 or proj["pos"].y > camera_offset.y + SCREEN_HEIGHT + 200):
+            pygame
             projectiles.remove(proj)
 
 
@@ -1219,8 +1199,7 @@ while running:
                 monster_rect = pygame.Rect(int(monster["pos"].x - monster["radius"]),
                                            int(monster["pos"].y - monster["radius"]),
                                            monster["radius"]*2, monster["radius"]*2)
-                for obj in platforms:
-                    plat = obj["rect"]
+                for plat in platforms:
                     if monster_rect.colliderect(plat):
                         plat_top = plat.top
                         if feet_y - monster["vel_y"] * dt <= plat_top + 2:
@@ -1291,48 +1270,28 @@ while running:
                             (i - camera_offset.x, GROUND_Y - camera_offset.y),
                             (i - camera_offset.x, GROUND_Y - camera_offset.y + 100), 2)
 
-    # Plateformes avec relief ou textures
-    if use_block_ground:
-        for obj in decorations:
-            plat = obj["rect"]
-            b_type = obj["type"]
-            plat_rect_screen = plat.move(-camera_offset.x, -camera_offset.y)
-            if b_type in BLOCK_IMAGES:
-                screen.blit(BLOCK_IMAGES[b_type], plat_rect_screen)
-
-        for obj in platforms:
-            plat = obj["rect"]
-            b_type = obj["type"]
-            plat_rect_screen = plat.move(-camera_offset.x, -camera_offset.y)
-            if b_type in BLOCK_IMAGES:
-                screen.blit(BLOCK_IMAGES[b_type], plat_rect_screen)
-            else:
-                pygame.draw.rect(screen, PLATFORM_COLOR, plat_rect_screen)
-                pygame.draw.rect(screen, PLATFORM_HIGHLIGHT, plat_rect_screen, 1)
-    else:
-        for obj in platforms:
-            plat = obj["rect"]
-            plat_rect_screen = plat.move(-camera_offset.x, -camera_offset.y)
-            pygame.draw.rect(screen, PLATFORM_COLOR, plat_rect_screen)
+    # Plateformes avec relief
+    for plat in platforms:
+        plat_rect_screen = plat.move(-camera_offset.x, -camera_offset.y)
+        pygame.draw.rect(screen, PLATFORM_COLOR, plat_rect_screen)
+        if use_block_ground:
+            pygame.draw.rect(screen, PLATFORM_HIGHLIGHT, plat_rect_screen, 1)
+        else:
             pygame.draw.rect(screen, PLATFORM_HIGHLIGHT, plat_rect_screen, 3)
             pygame.draw.line(screen, (80, 50, 20),
                             (plat_rect_screen.left, plat_rect_screen.top + 5),
                             (plat_rect_screen.right, plat_rect_screen.top + 5), 2)
 
-    # Porte avec détails ou texture
+    # Porte avec détails
     goal_rect_screen = goal_rect.move(-camera_offset.x, -camera_offset.y)
-    if "end_level" in BLOCK_IMAGES:
-        end_img = pygame.transform.scale(BLOCK_IMAGES["end_level"], (goal_rect.width, goal_rect.height))
-        screen.blit(end_img, goal_rect_screen)
-    else:
-        pygame.draw.rect(screen, DOOR_COLOR, goal_rect_screen)
-        pygame.draw.rect(screen, DOOR_FRAME, goal_rect_screen, 5)
-        pygame.draw.line(screen, (100, 70, 20),
-                        (goal_rect_screen.centerx, goal_rect_screen.top),
-                        (goal_rect_screen.centerx, goal_rect_screen.bottom), 3)
-        knob_pos = (goal_rect_screen.right - 12, goal_rect_screen.centery)
-        pygame.draw.circle(screen, (30, 30, 30), knob_pos, 6)
-        pygame.draw.circle(screen, (80, 80, 80), knob_pos, 3)
+    pygame.draw.rect(screen, DOOR_COLOR, goal_rect_screen)
+    pygame.draw.rect(screen, DOOR_FRAME, goal_rect_screen, 5)
+    pygame.draw.line(screen, (100, 70, 20),
+                    (goal_rect_screen.centerx, goal_rect_screen.top),
+                    (goal_rect_screen.centerx, goal_rect_screen.bottom), 3)
+    knob_pos = (goal_rect_screen.right - 12, goal_rect_screen.centery)
+    pygame.draw.circle(screen, (30, 30, 30), knob_pos, 6)
+    pygame.draw.circle(screen, (80, 80, 80), knob_pos, 3)
 
     # Ombres
     player_feet = player_pos.y + head_radius + body_height + leg_height
@@ -1470,6 +1429,16 @@ while running:
         stamina_bar_fill = pygame.Rect(stamina_bar_bg.left, stamina_bar_bg.top, fill_width, stamina_bar_bg.height)
         pygame.draw.rect(screen, (70, 170, 255), stamina_bar_fill, border_radius=6)
     pygame.draw.rect(screen, (120, 180, 255), stamina_bar_bg, 2, border_radius=6)
+    if use_jetpack:
+        fuel_label = small_font.render("Carburant", True, FUEL_COLOR)
+        screen.blit(fuel_label, (30, 170))
+        fuel_bar_bg = pygame.Rect(30, 200, 240, 20)
+        pygame.draw.rect(screen, (40, 40, 40), fuel_bar_bg, border_radius=6)
+        fuel_ratio = fuel / STAMINA_MAX if STAMINA_MAX else 0
+        fill_width = int(fuel_bar_bg.width * max(0, min(1, fuel_ratio)))
+        if fill_width > 0:
+            fuel_bar_fill = pygame.Rect(fuel_bar_bg.left, fuel_bar_bg.top, fill_width, fuel_bar_bg.height)
+            pygame.draw.rect(screen, FUEL_COLOR, fuel_bar_fill, border_radius=6)
 
     if is_invulnerable:
         inv_text = small_font.render("⚡ INVULNÉRABLE", True, (255, 255, 0))
@@ -1556,7 +1525,7 @@ while running:
         level_transition_timer = 0.0
 
     if lives <= 0:
-        inverted_gravity = False
+        use_jetpack = False
         GRAVITY = -GRAVITY
         JUMP_FORCE = -JUMP_FORCE
         DEATH_BELOW_Y = -DEATH_BELOW_Y

@@ -547,7 +547,6 @@ def instantiate_level_enemies():
         current_monster_cap = MAX_MONSTERS
     monster_spawn_timer = 0.0
 
-# === Multi-niveaux: chargement levels.json et application d'un niveau ===
 def _default_level():
     return {
         "name": "Défaut",
@@ -614,6 +613,7 @@ if not levels:
 selected_level_idx = 0
 
 platforms = []
+decorations = []
 use_block_ground = False
 goal_rect = pygame.Rect(0, 0, 0, 0)
 spawn_point = pygame.Vector2(0, 0)
@@ -639,13 +639,14 @@ def get_block_coordinates(blocks, filter_type=None):
 
 def apply_level(level):
     global GROUND_Y, GROUND_START_X, GROUND_END_X, DEATH_BELOW_Y
-    global goal_rect, spawn_point, level_enemy_configs, platforms, use_block_ground
+    global goal_rect, spawn_point, level_enemy_configs, platforms, decorations, use_block_ground
 
     blocks = _extract_level_blocks(level)
     use_block_ground = bool(blocks)
 
     if use_block_ground:
         solid_objs = []
+        decor_objs = []
         for b in blocks:
             b_type = b.get("type")
             if b_type in SOLID_BLOCK_TYPES:
@@ -653,7 +654,13 @@ def apply_level(level):
                 by = int(b.get("y", 0))
                 rect = pygame.Rect(bx, by, TILE_SIZE, TILE_SIZE)
                 solid_objs.append({"rect": rect, "type": b_type})
+            elif b_type in ["eau", "lave"]:
+                bx = int(b.get("x", 0))
+                by = int(b.get("y", 0))
+                rect = pygame.Rect(bx, by, TILE_SIZE, TILE_SIZE)
+                decor_objs.append({"rect": rect, "type": b_type})
         platforms = solid_objs
+        decorations = decor_objs
 
         if solid_objs:
             GROUND_START_X = min(obj["rect"].left for obj in solid_objs)
@@ -965,14 +972,17 @@ while running:
     # Mouvements
     stamina_idle_timer += dt
     keys = pygame.key.get_pressed()
+    
+    # 1. Mouvement en X
     moving = False
+    dx = 0
     if keys[pygame.K_q] or keys[pygame.K_LEFT]:
-        player_pos.x -= MOVE_SPEED * dt
+        dx -= MOVE_SPEED * dt
         flip = True
         direction = -1
         moving = True
     if keys[pygame.K_d] or keys[pygame.K_RIGHT]:
-        player_pos.x += MOVE_SPEED * dt
+        dx += MOVE_SPEED * dt
         flip = False
         direction = 1
         moving = True
@@ -986,19 +996,89 @@ while running:
     elif inverted_gravity and not keys[pygame.K_g]:
         inverted_gravity = False
 
-    # Détection sol/plateforme
-    feet_y = player_pos.y + head_radius + body_height + leg_height
-    on_ground = False
-    # Sol infini limité en X (mode ancien format)
-    if (not use_block_ground) and feet_y >= GROUND_Y - 0.1 and GROUND_START_X <= player_pos.x <= GROUND_END_X:
-        on_ground = True
-    else:
+    dash_pressed = keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT]
+    if dash_pressed and not dash_was_pressed and dash_timer <= 0 and stamina >= DASH_COST:
+        desired_dir = 0
+        if keys[pygame.K_q] or keys[pygame.K_LEFT]:
+            desired_dir = -1
+        elif keys[pygame.K_d] or keys[pygame.K_RIGHT]:
+            desired_dir = 1
+        else:
+            desired_dir = direction
+        if desired_dir != 0:
+            dash_direction = desired_dir
+            dash_timer = DASH_DURATION
+            stamina = max(0, stamina - DASH_COST)
+            stamina_idle_timer = 0.0
+            stamina_regen_timer = 0.0
+
+    if dash_timer > 0:
+        dx += dash_direction * DASH_SPEED * dt
+        dash_timer = max(0.0, dash_timer - dt)
+
+    player_pos.x += dx
+    player_pos.x = max(head_radius, player_pos.x)
+
+    # Collisions en X
+    player_rect = pygame.Rect(int(player_pos.x - head_radius), int(player_pos.y - head_radius),
+                              head_radius*2, head_radius*2 + body_height + leg_height)
+    if use_block_ground:
         for obj in platforms:
             plat = obj["rect"]
-            if plat.left - 5 < player_pos.x < plat.right + 5 and abs(feet_y - plat.top) <= 6:
+            if player_rect.colliderect(plat):
+                if dx > 0:
+                    player_rect.right = plat.left
+                    player_pos.x = player_rect.centerx
+                elif dx < 0:
+                    player_rect.left = plat.right
+                    player_pos.x = player_rect.centerx
+
+    # 2. Mouvement en Y et Gravité
+    if (inverted_gravity and GRAVITY > 0) or (not inverted_gravity and GRAVITY < 0):
+        GRAVITY = -GRAVITY
+        JUMP_FORCE = -JUMP_FORCE
+        DEATH_BELOW_Y = -DEATH_BELOW_Y
+
+    player_vel_y += GRAVITY * dt
+    dy = player_vel_y * dt
+    player_pos.y += dy
+
+    # Collisions en Y
+    player_rect = pygame.Rect(int(player_pos.x - head_radius), int(player_pos.y - head_radius),
+                              head_radius*2, head_radius*2 + body_height + leg_height)
+    on_ground = False
+    
+    if use_block_ground:
+        for obj in platforms:
+            plat = obj["rect"]
+            if player_rect.colliderect(plat):
+                if dy > 0:
+                    player_rect.bottom = plat.top
+                    player_pos.y = player_rect.top + head_radius
+                    player_vel_y = 0
+                    on_ground = True
+                elif dy < 0:
+                    player_rect.top = plat.bottom
+                    player_pos.y = player_rect.top + head_radius
+                    player_vel_y = 0
+    else:
+        feet_y = player_pos.y + head_radius + body_height + leg_height
+        if not inverted_gravity and feet_y > GROUND_Y and GROUND_START_X <= player_pos.x <= GROUND_END_X:
+            player_pos.y = GROUND_Y - (head_radius + body_height + leg_height)
+            player_vel_y = 0
+            on_ground = True
+        elif inverted_gravity and feet_y < GROUND_Y+128 and GROUND_START_X <= player_pos.x <= GROUND_END_X:
+            player_pos.y = GROUND_Y + 128 + (head_radius + body_height + leg_height)
+            player_vel_y = 0
+            on_ground = True
+
+    # Juste vérifier si on est sur le sol même si on ne bouge pas verticalement (pour les platforms)
+    if not on_ground and use_block_ground:
+        feet_rect = player_rect.copy()
+        feet_rect.y += 2 if not inverted_gravity else -2
+        for obj in platforms:
+            if feet_rect.colliderect(obj["rect"]):
                 on_ground = True
-                player_pos.y = plat.top - (head_radius + body_height + leg_height)
-                player_vel_y = 0
                 break
 
     if on_ground:
@@ -1021,58 +1101,8 @@ while running:
             stamina_regen_timer = 0.0
             air_jumps_left -= 1
 
-    dash_pressed = keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT]
-    if dash_pressed and not dash_was_pressed and dash_timer <= 0 and stamina >= DASH_COST:
-        desired_dir = 0
-        if keys[pygame.K_q] or keys[pygame.K_LEFT]:
-            desired_dir = -1
-        elif keys[pygame.K_d] or keys[pygame.K_RIGHT]:
-            desired_dir = 1
-        else:
-            desired_dir = direction
-        if desired_dir != 0:
-            dash_direction = desired_dir
-            dash_timer = DASH_DURATION
-            stamina = max(0, stamina - DASH_COST)
-            stamina_idle_timer = 0.0
-            stamina_regen_timer = 0.0
-
     jump_was_pressed = space_pressed
     dash_was_pressed = dash_pressed
-
-    player_vel_y += GRAVITY * dt
-    player_pos.y += player_vel_y * dt
-
-    if (inverted_gravity and GRAVITY > 0) or (not inverted_gravity and GRAVITY < 0):
-        GRAVITY = -GRAVITY
-        JUMP_FORCE = -JUMP_FORCE
-        DEATH_BELOW_Y = -DEATH_BELOW_Y
-
-    feet_y = player_pos.y + head_radius + body_height + leg_height
-    if not inverted_gravity and (not use_block_ground) and feet_y > GROUND_Y and GROUND_START_X <= player_pos.x <= GROUND_END_X:
-        player_pos.y = GROUND_Y - (head_radius + body_height + leg_height)
-        player_vel_y = 0
-    elif inverted_gravity and (not use_block_ground) and feet_y < GROUND_Y+128 and GROUND_START_X <= player_pos.x <= GROUND_END_X:
-        player_pos.y = GROUND_Y + 128 + (head_radius + body_height + leg_height)
-        player_vel_y = 0
-
-    player_rect = pygame.Rect(int(player_pos.x - head_radius), int(player_pos.y - head_radius),
-                              head_radius*2, head_radius*2 + body_height + leg_height)
-    if player_vel_y >= 0:
-        for obj in platforms:
-            plat = obj["rect"]
-            if player_rect.colliderect(plat):
-                plat_top = plat.top
-                if feet_y - player_vel_y * dt <= plat_top:
-                    player_pos.y = plat_top - (head_radius + body_height + leg_height)
-                    player_vel_y = 0
-                    break
-
-    if dash_timer > 0:
-        player_pos.x += dash_direction * DASH_SPEED * dt
-        dash_timer = max(0.0, dash_timer - dt)
-
-    player_pos.x = max(head_radius, player_pos.x)
 
     if stamina_idle_timer >= STAMINA_REGEN_DELAY and stamina < STAMINA_MAX:
         stamina_regen_timer += dt
@@ -1263,6 +1293,13 @@ while running:
 
     # Plateformes avec relief ou textures
     if use_block_ground:
+        for obj in decorations:
+            plat = obj["rect"]
+            b_type = obj["type"]
+            plat_rect_screen = plat.move(-camera_offset.x, -camera_offset.y)
+            if b_type in BLOCK_IMAGES:
+                screen.blit(BLOCK_IMAGES[b_type], plat_rect_screen)
+
         for obj in platforms:
             plat = obj["rect"]
             b_type = obj["type"]

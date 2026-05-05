@@ -1373,13 +1373,13 @@ while running:
             if cnt2 < 5:
                 monster["anim"] = 'assets/texture/monsterb1.png'
             elif cnt2 < 9:
-                monster["anim"] = 'assets/texture/monsterb2.webp'
+                monster["anim"] = 'assets/texture/monsterb2.png'
             elif cnt2 < 13:
                 monster["anim"] = 'assets/texture/monsterb3.png'
             elif cnt2 < 17:
-                monster["anim"] = 'assets/texture/monsterb4.webp'
+                monster["anim"] = 'assets/texture/monsterb4.png'
             elif cnt2 < 21:
-                monster["anim"] = 'assets/texture/monsterb5.webp'
+                monster["anim"] = 'assets/texture/monsterb5.png'
             elif cnt2 > 20:
                 monster["anim"] = 'assets/texture/monsterb1.png'
                 cnt2 = 0

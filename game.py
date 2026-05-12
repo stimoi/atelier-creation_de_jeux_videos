@@ -414,7 +414,7 @@ dash_timer = 0.0
 dash_direction = 1
 
 player_pos.y = GROUND_Y - (head_radius + body_height + leg_height)
-spawn_point = player_pos
+spawn_point = player_pos.copy()
 
 # === Projectiles ===
 projectiles = []
@@ -804,7 +804,7 @@ while running:
                     # Appliquer le niveau sélectionné au démarrage
                     apply_level(levels[selected_level_idx])
                     instantiate_level_enemies()
-                    player_pos = spawn_point
+                    player_pos.update(spawn_point)
                     player_vel_y = 0
                     projectiles = []
                     particles = []
@@ -875,7 +875,7 @@ while running:
                 # Appliquer le niveau sélectionné au démarrage
                 apply_level(levels[selected_level_idx])
                 instantiate_level_enemies()
-                player_pos = spawn_point
+                player_pos.update(spawn_point)
                 player_vel_y = 0
                 game_state = "PLAYING"
                 projectiles = []
@@ -1124,7 +1124,7 @@ while running:
         lives -= 1
         is_invulnerable = True
         invuln_timer = invuln_time
-        player_pos = spawn_point
+        player_pos.update(spawn_point)
         player_vel_y = 0
         create_particles(player_pos, (255, 100, 100), 15)
 
@@ -1229,7 +1229,7 @@ while running:
                 lives -= 1
                 is_invulnerable = True
                 invuln_timer = invuln_time
-                player_pos = spawn_point
+                player_pos.update(spawn_point)
                 player_vel_y = 0
                 create_particles(player_pos, (255, 255, 100), 15)
                 break
@@ -1482,7 +1482,7 @@ while running:
                 selected_level_idx = level_transition_next_idx
                 apply_level(levels[selected_level_idx])
                 instantiate_level_enemies()
-                player_pos = spawn_point
+                player_pos.update(spawn_point)
                 player_vel_y = 0
                 projectiles = []
                 particles = []

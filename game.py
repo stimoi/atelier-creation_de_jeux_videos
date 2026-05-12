@@ -990,6 +990,11 @@ while running:
     else:
         walk_cycle = 0
 
+    if keys[pygame.K_j] and fuel > 0:
+        use_jetpack = True
+    elif fuel <= 0 or (use_jetpack and not keys[pygame.K_j]):
+        use_jetpack = False
+
     dash_pressed = keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT]
     if dash_pressed and not dash_was_pressed and dash_timer <= 0:
         desired_dir = 0

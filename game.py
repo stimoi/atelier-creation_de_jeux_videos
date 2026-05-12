@@ -737,6 +737,7 @@ level_name = ""
 # Variable d'effet du son
 jump = pygame.mixer.Sound('assets/sound/jump.wav')
 jetpack = pygame.mixer.Sound('assets/sound/jetpack.wav')
+shoot = pygame.mixer.Sound('assets/sound/shoot.wav')
 
 # Initialisation du mélangeur audio
 pygame.mixer.init()
@@ -846,6 +847,7 @@ while running:
 
                     proj_x = player_pos.x + dir_x * (player_width / 2 + 10)
                     proj_y = player_pos.y + dir_y * (player_height / 2 + 10)
+                    shoot.play()
 
                     projectiles.append({
                         "pos": pygame.Vector2(proj_x, proj_y),

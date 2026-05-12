@@ -736,6 +736,7 @@ level_name = ""
 
 # Variable d'effet du son
 jump = pygame.mixer.Sound('assets/sound/jump.wav')
+jetpack = pygame.mixer.Sound('assets/sound/jetpack.wav')
 
 # Initialisation du mélangeur audio
 pygame.mixer.init()
@@ -990,8 +991,10 @@ while running:
 
     if keys[pygame.K_j] and fuel > 0:
         use_jetpack = True
+        jetpack.play()
     elif fuel <= 0 or (use_jetpack and not keys[pygame.K_j]):
         use_jetpack = False
+        jetpack.stop()
 
     dash_pressed = keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT]
     if dash_pressed and not dash_was_pressed and dash_timer <= 0:

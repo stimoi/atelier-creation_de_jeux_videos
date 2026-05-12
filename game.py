@@ -843,8 +843,8 @@ while running:
                     dir_x = dx / distance
                     dir_y = dy / distance
 
-                    proj_x = player_pos.x + dir_x * (head_radius + 10)
-                    proj_y = player_pos.y + dir_y * (head_radius + 10)
+                    proj_x = player_pos.x + dir_x * (player_width / 2 + 10)
+                    proj_y = player_pos.y + dir_y * (player_height / 2 + 10)
 
                     projectiles.append({
                         "pos": pygame.Vector2(proj_x, proj_y),

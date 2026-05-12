@@ -412,7 +412,7 @@ dash_timer = 0.0
 dash_direction = 1
 
 player_pos.y = GROUND_Y - player_height
-spawn_point = player_pos.copy()
+spawn_point = player_pos
 
 # === Projectiles ===
 projectiles = []

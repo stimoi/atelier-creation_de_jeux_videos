@@ -8,4 +8,5 @@ BLOCS = {
   "spawn": {"texture": 'assets/texture/spawn.png'},
   "end_level": {"texture": 'assets/texture/end_level.png'},
   "spawn_bird": {"texture": 'assets/texture/bird_spawn.png'},
+  "spawn_dog": {"texture": 'assets/texture/dog_spawn.png'},
 }

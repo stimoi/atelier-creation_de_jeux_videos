@@ -3,7 +3,7 @@ import math
 import os
 import random
 from copy import deepcopy
-from blocs import BLOCS
+from common import BLOCS
 
 import pygame
 

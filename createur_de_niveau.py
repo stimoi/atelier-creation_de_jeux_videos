@@ -3,7 +3,7 @@ import json
 import sys
 import tkinter as tk
 from tkinter import filedialog
-from blocs import BLOCS
+from common import BLOCS
 
 # On initialise tkinter et on cache sa fenêtre principale
 root = tk.Tk()

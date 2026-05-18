@@ -280,6 +280,7 @@ DASH_DURATION = 0.2
 FPS = 60
 MAX_MONSTERS = 3
 MONSTER_SPAWN_COOLDOWN = 2.0  # Secondes entre chaque spawn
+BIRD_ROAM_DISTANCE = 240
 DEATH_BELOW_Y = 2000
 
 # === Caméra ===
@@ -323,6 +324,85 @@ def circle_rect_collision(center, radius, rect):
     dx = cx - closest_x
     dy = cy - closest_y
     return dx * dx + dy * dy <= radius * radius
+
+def _monster_rect(monster):
+    radius = int(monster.get("radius", 20))
+    return pygame.Rect(
+        int(monster["pos"].x - radius),
+        int(monster["pos"].y - radius),
+        radius * 2,
+        radius * 2,
+    )
+
+def _rect_hits_any_platform(rect):
+    for obj in platforms:
+        if rect.colliderect(obj["rect"]):
+            return True
+    return False
+
+def _monster_front_probe(monster, extra=4, thickness=6):
+    rect = _monster_rect(monster)
+    direction = 1 if monster.get("dir", 1) >= 0 else -1
+    x = rect.right + extra if direction > 0 else rect.left - extra - thickness
+    y = rect.top + int(rect.height * 0.25)
+    return pygame.Rect(int(x), int(y), thickness, max(8, int(rect.height * 0.5)))
+
+def _monster_foot_probe(monster, extra=4, width=8):
+    rect = _monster_rect(monster)
+    direction = 1 if monster.get("dir", 1) >= 0 else -1
+    x = rect.right + extra if direction > 0 else rect.left - extra - width
+    y = rect.bottom + 2
+    return pygame.Rect(int(x), int(y), width, 6)
+
+def _monster_head_probe(monster, extra=4, width=8):
+    rect = _monster_rect(monster)
+    direction = 1 if monster.get("dir", 1) >= 0 else -1
+    x = rect.right + extra if direction > 0 else rect.left - extra - width
+    y = rect.top - max(12, rect.height // 2)
+    return pygame.Rect(int(x), int(y), width, max(12, rect.height // 2))
+
+def _monster_hits_ahead(monster):
+    return _rect_hits_any_platform(_monster_front_probe(monster))
+
+def _monster_has_ground_ahead(monster):
+    return _rect_hits_any_platform(_monster_foot_probe(monster))
+
+def _monster_has_block_above_ahead(monster):
+    return _rect_hits_any_platform(_monster_head_probe(monster))
+
+def _monster_is_on_ground(monster):
+    rect = _monster_rect(monster)
+    probe = pygame.Rect(rect.left, rect.bottom + 1, rect.width, 4)
+    return _rect_hits_any_platform(probe)
+
+def _resolve_monster_horizontal_collision(monster, previous_x):
+    rect = _monster_rect(monster)
+    for obj in platforms:
+        plat = obj["rect"]
+        if rect.colliderect(plat):
+            if monster["pos"].x > previous_x:
+                monster["pos"].x = plat.left - monster["radius"]
+            else:
+                monster["pos"].x = plat.right + monster["radius"]
+            monster["dir"] *= -1
+            return True
+    return False
+
+def _resolve_monster_vertical_collision(monster, previous_y):
+    rect = _monster_rect(monster)
+    on_ground = False
+    for obj in platforms:
+        plat = obj["rect"]
+        if rect.colliderect(plat):
+            if monster["pos"].y > previous_y:
+                monster["pos"].y = plat.top - monster["radius"]
+                monster["vel_y"] = 0
+                on_ground = True
+            elif monster["pos"].y < previous_y:
+                monster["pos"].y = plat.bottom + monster["radius"]
+                monster["vel_y"] = 0
+            rect = _monster_rect(monster)
+    return on_ground
 
 # === Nuages et Parallax ===
 clouds = []
@@ -423,50 +503,38 @@ monster_radius = 25
 monster_spawn_timer = 0.0
 
 def spawn_monster():
-    x = random.randint(100, 2500)
-    # Types: tank (gros/lent), fast (petit/rapide), flyer (vole)
-    r = random.random()
-    if r < 0.3:
-        m_type = "tank"
-        radius = 32
-        speed = 60
-        hp = 3
-        y = GROUND_Y - radius
-        extra = {"vel_y": 0.0}
-    elif r < 0.7:
-        m_type = "fast"
-        radius = 18
-        speed = 140
-        hp = 1
+    m_type = random.choice(["dog", "bird"])
+    if m_type == "dog":
+        radius = MONSTER_TYPE_DEFAULTS["dog"]["radius"]
+        speed = MONSTER_TYPE_DEFAULTS["dog"]["speed"]
+        hp = MONSTER_TYPE_DEFAULTS["dog"]["hp"]
+        x = random.randint(100, 2500)
         y = GROUND_Y - radius
         extra = {"vel_y": 0.0}
     else:
-        m_type = "flyer"
-        radius = 22
-        speed = 110
-        hp = 1
-        base_y = random.randint(GROUND_Y - 280, GROUND_Y - 140)
-        y = base_y
-        extra = {"fly_phase": random.uniform(0, 6.28), "base_y": base_y}
+        radius = MONSTER_TYPE_DEFAULTS["bird"]["radius"]
+        speed = MONSTER_TYPE_DEFAULTS["bird"]["speed"]
+        hp = MONSTER_TYPE_DEFAULTS["bird"]["hp"]
+        x = random.randint(100, 2500)
+        y = random.randint(GROUND_Y - 280, GROUND_Y - 140)
+        extra = {"fly_phase": random.uniform(0, 6.28), "base_y": y}
 
     data = {
         "pos": pygame.Vector2(x, y),
-        "dir": random.choice([-1, 1]),
+        "dir": -1,
         "type": m_type,
         "radius": radius,
         "speed": speed,
         "hp": hp,
         "anim": 'monster3.png',
-        "hit_flash": 0.0,
+        "origin_x": x,
     }
     data.update(extra)
     return data
 
 MONSTER_TYPE_DEFAULTS = {
-    "tank": {"radius": 32, "speed": 60, "hp": 3, "dir": 1},
-    "fast": {"radius": 18, "speed": 140, "hp": 1, "dir": 1},
-    "flyer": {"radius": 22, "speed": 110, "hp": 1, "dir": 1},
-    "basic": {"radius": 20, "speed": 100, "hp": 1, "dir": 1},
+    "dog": {"radius": 18, "speed": 120, "hp": 1, "dir": -1},
+    "bird": {"radius": 22, "speed": 110, "hp": 1, "dir": -1},
 }
 
 level_enemy_configs = []
@@ -475,37 +543,100 @@ monsters = []
 
 
 def _canonical_monster_type(raw_type):
-    if not raw_type:
-        return "basic"
-    t = str(raw_type).lower()
-    if t in MONSTER_TYPE_DEFAULTS:
-        return t
-    if t in ("walker", "ground"):
-        return "basic"
-    return "basic"
+    t = str(raw_type or "").strip().lower()
+    if t in ("spawn_dog", "dog", "chien", "ground_dog"):
+        return "dog"
+    if t in ("spawn_bird", "bird", "oiseau", "flying_bird"):
+        return "bird"
+    return "dog"
+
+def _safe_float(value, default=0.0):
+    try:
+        if value is None:
+            return float(default)
+        return float(value)
+    except Exception:
+        return float(default)
+
+def _safe_int(value, default=0):
+    try:
+        if value is None:
+            return int(default)
+        return int(value)
+    except Exception:
+        return int(default)
+
+def _extract_position_from_config(cfg, default_x=0.0, default_y=0.0):
+    if isinstance(cfg, dict):
+        for key in ("pos", "position", "spawn", "spawn_pos", "point"):
+            if key in cfg:
+                pos = cfg.get(key)
+                if isinstance(pos, dict):
+                    x = pos.get("x", pos.get("left", default_x))
+                    y = pos.get("y", pos.get("top", default_y))
+                    return _safe_float(x, default_x), _safe_float(y, default_y)
+                if isinstance(pos, (list, tuple)) and len(pos) >= 2:
+                    return _safe_float(pos[0], default_x), _safe_float(pos[1], default_y)
+
+        if "x" in cfg or "y" in cfg:
+            return _safe_float(cfg.get("x", default_x), default_x), _safe_float(cfg.get("y", default_y), default_y)
+
+        for x_key, y_key in (("spawn_x", "spawn_y"), ("px", "py"), ("left", "top")):
+            if x_key in cfg or y_key in cfg:
+                return _safe_float(cfg.get(x_key, default_x), default_x), _safe_float(cfg.get(y_key, default_y), default_y)
+
+    if isinstance(cfg, (list, tuple)) and len(cfg) >= 2:
+        return _safe_float(cfg[0], default_x), _safe_float(cfg[1], default_y)
+
+    return default_x, default_y
+
+def _extract_raw_type_from_config(cfg):
+    if isinstance(cfg, str):
+        return cfg
+    if isinstance(cfg, (list, tuple)) and cfg:
+        if isinstance(cfg[0], str):
+            return cfg[0]
+    if isinstance(cfg, dict):
+        for key in ("type", "kind", "monster_type", "spawn_type", "name", "variant"):
+            if key in cfg:
+                return cfg.get(key)
+    return None
 
 
 def create_monster_from_config(config, template_id=None):
     cfg = deepcopy(config)
-    m_type = _canonical_monster_type(cfg.get("type"))
+    if isinstance(cfg, str):
+        cfg = {"type": cfg}
+    elif isinstance(cfg, (list, tuple)):
+        if len(cfg) >= 3 and isinstance(cfg[0], str):
+            cfg = {"type": cfg[0], "x": cfg[1], "y": cfg[2]}
+        elif len(cfg) >= 2:
+            cfg = {"x": cfg[0], "y": cfg[1]}
+        else:
+            cfg = {}
+    elif not isinstance(cfg, dict):
+        cfg = {}
+
+    m_type = _canonical_monster_type(_extract_raw_type_from_config(cfg))
     defaults = MONSTER_TYPE_DEFAULTS[m_type]
 
-    x = float(cfg.get("x", 0))
-    y = float(cfg.get("y", 0))
+    x, y = _extract_position_from_config(cfg)
+
     width = cfg.get("w") or cfg.get("width")
     height = cfg.get("h") or cfg.get("height")
 
     radius = cfg.get("radius")
     if radius is None:
         if width and height:
-            radius = max(width, height) / 2
+            radius = int(max(_safe_float(width), _safe_float(height)) / 2)
         else:
             radius = defaults["radius"]
+    radius = int(radius)
 
-    speed = cfg.get("speed", defaults["speed"])
-    hp = int(cfg.get("hp", defaults["hp"]))
+    speed = _safe_float(cfg.get("speed", defaults["speed"]), defaults["speed"])
+    hp = _safe_int(cfg.get("hp", defaults["hp"]), defaults["hp"])
     dir_val = cfg.get("dir", defaults["dir"])
-    direction = -1 if float(dir_val) < 0 else 1
+    direction = -1 if _safe_float(dir_val, defaults["dir"]) < 0 else 1
 
     monster = {
         "pos": pygame.Vector2(x, y),
@@ -514,22 +645,45 @@ def create_monster_from_config(config, template_id=None):
         "radius": radius,
         "speed": speed,
         "hp": hp,
-        "hit_flash": 0.0,
+        "origin_x": x,
     }
 
-    if m_type == "flyer":
-        base_y = float(cfg.get("base_y", y))
+    if m_type == "bird":
+        base_y = _safe_float(cfg.get("base_y", y), y)
         monster.update({
-            "fly_phase": float(cfg.get("fly_phase", 0.0)),
+            "fly_phase": _safe_float(cfg.get("fly_phase", 0.0), 0.0),
             "base_y": base_y,
         })
     else:
-        monster["vel_y"] = float(cfg.get("vel_y", 0.0))
+        monster["vel_y"] = _safe_float(cfg.get("vel_y", 0.0), 0.0)
 
     if template_id is not None:
         monster["template_id"] = template_id
 
     return monster
+
+def _collect_level_enemy_configs(level, blocks):
+    configs = []
+
+    for b in blocks:
+        b_type = b.get("type")
+        if b_type not in {"spawn_dog", "spawn_bird"}:
+            continue
+        bx = float(b.get("x", 0)) + TILE_SIZE / 2
+        by = float(b.get("y", 0)) + TILE_SIZE / 2
+        configs.append({
+            "x": bx,
+            "y": by,
+            "type": "dog" if b_type == "spawn_dog" else "bird",
+            "dir": b.get("dir", 1),
+        })
+
+    raw_enemies = level.get("enemies", [])
+    if isinstance(raw_enemies, list):
+        for entry in raw_enemies:
+            configs.append(deepcopy(entry))
+
+    return configs
 
 
 def instantiate_level_enemies():
@@ -690,12 +844,7 @@ def apply_level(level):
         s = level.get("spawn", {})
         spawn_point.update(float(s.get("x", spawn_point.x)), float(s.get("y", spawn_point.y)))
 
-    level_enemy_configs = []
-    raw_enemies = level.get("enemies", [])
-    if isinstance(raw_enemies, list):
-        for entry in raw_enemies:
-            if isinstance(entry, dict):
-                level_enemy_configs.append(deepcopy(entry))
+    level_enemy_configs = _collect_level_enemy_configs(level, blocks)
     select_tutorial_for_level(level)
 
 def event_handler(event: str):
@@ -1114,7 +1263,7 @@ while running:
         create_particles((feet_x, feet_y), (180, 180, 180), 10)
     prev_on_ground = on_ground
 
-    blink_timer = 0.0-dt
+    blink_timer -= dt
     if blink_timer <= 0 and blink_close <= 0:
         blink_close = 0.12
         blink_timer = random.uniform(2.0, 5.0)
@@ -1150,19 +1299,21 @@ while running:
         for monster in monsters[:]:
             if proj["pos"].distance_to(monster["pos"]) < projectile_radius + monster["radius"]:
                 monster["hp"] -= 1
-                monster["hit_flash"] = 0.2
 
                 if monster["hp"] <= 0:
                     create_particles(monster["pos"], (255, 50, 50), 12)
                     monsters.remove(monster)
-                    score += 2 if monster["type"] == "tank" else 1
+                    score += 1
+                    if level_enemy_configs and monster.get("template_id") is not None:
+                        monster_spawn_timer = MONSTER_SPAWN_COOLDOWN
 
                 if proj in projectiles:
                     projectiles.remove(proj)
                 break
 
     # Spawn avec cooldown
-    monster_spawn_timer = 0-dt
+    if monster_spawn_timer > 0:
+        monster_spawn_timer = max(0.0, monster_spawn_timer - dt)
     if monster_spawn_timer <= 0:
         spawned = False
         if level_enemy_configs:
@@ -1184,45 +1335,55 @@ while running:
 
     # Monstres (mouvement, gravité/vol et flash)
     for monster in monsters:
-        # Horizontal
-        monster["pos"].x += monster["dir"] * monster["speed"] * dt
-        if monster["pos"].x < 50:
-            monster["dir"] = 1
-        if monster["pos"].x > 2500:
-            monster["dir"] = -1
+        m_type = monster.get("type")
+        radius = monster["radius"]
 
-        if monster.get("type") == "flyer":
-            # Vol stationnaire/ondulant
+        if m_type == "bird":
+            previous_x = monster["pos"].x
+            monster["pos"].x += monster["dir"] * monster["speed"] * dt
+            origin_x = monster.get("origin_x", monster["pos"].x)
+            if abs(monster["pos"].x - origin_x) > BIRD_ROAM_DISTANCE:
+                monster["dir"] = -1 if monster["pos"].x > origin_x else 1
+            if _monster_hits_ahead(monster) or _resolve_monster_horizontal_collision(monster, previous_x):
+                monster["pos"].x = previous_x
+                monster["dir"] *= -1
+            monster["pos"].y = monster.get("base_y", monster["pos"].y)
             monster["fly_phase"] += dt * 2.0
-            monster["pos"].y = monster["base_y"] + math.sin(monster["fly_phase"]) * 25
-        else:
-            # Gravité (marcheurs)
-            monster["vel_y"] += GRAVITY * dt
-            monster["pos"].y += monster["vel_y"] * dt
+            monster["pos"].y = monster["base_y"] + math.sin(monster["fly_phase"]) * 12
 
-            # Collision sol (mode ancien format)
-            feet_y = monster["pos"].y + monster["radius"]
-            if (not use_block_ground) and feet_y > GROUND_Y:
-                monster["pos"].y = GROUND_Y - monster["radius"]
+        elif m_type == "dog":
+            on_ground = _monster_is_on_ground(monster)
+            if (not use_block_ground) and monster["pos"].y + radius >= GROUND_Y:
+                monster["pos"].y = GROUND_Y - radius
                 monster["vel_y"] = 0
+                on_ground = True
 
-            # Collision plateformes (atterrir par dessus)
-            if monster["vel_y"] >= 0:
-                monster_rect = pygame.Rect(int(monster["pos"].x - monster["radius"]),
-                                           int(monster["pos"].y - monster["radius"]),
-                                           monster["radius"]*2, monster["radius"]*2)
-                for obj in platforms:
-                    plat = obj["rect"]
-                    if monster_rect.colliderect(plat):
-                        plat_top = plat.top
-                        if feet_y - monster["vel_y"] * dt <= plat_top + 2:
-                            monster["pos"].y = plat_top - monster["radius"]
-                            monster["vel_y"] = 0
-                            break
+            if on_ground:
+                if not _monster_has_ground_ahead(monster):
+                    monster["dir"] *= -1
+                elif _monster_hits_ahead(monster):
+                    if not _monster_has_block_above_ahead(monster):
+                        monster["vel_y"] = JUMP_FORCE
+                    else:
+                        monster["dir"] *= -1
 
-        # Flash dégâts
-        if monster["hit_flash"] > 0:
-            monster["hit_flash"] -= dt
+            previous_x = monster["pos"].x
+            monster["pos"].x += monster["dir"] * monster["speed"] * dt
+            if _resolve_monster_horizontal_collision(monster, previous_x):
+                monster["pos"].x = previous_x
+
+            monster["vel_y"] += GRAVITY * dt
+            previous_y = monster["pos"].y
+            monster["pos"].y += monster["vel_y"] * dt
+            on_ground = _resolve_monster_vertical_collision(monster, previous_y)
+            if (not use_block_ground) and monster["pos"].y + radius >= GROUND_Y:
+                monster["pos"].y = GROUND_Y - radius
+                monster["vel_y"] = 0
+                on_ground = True
+
+            if on_ground and monster["vel_y"] == 0 and _monster_hits_ahead(monster):
+                if _monster_has_block_above_ahead(monster):
+                    monster["dir"] *= -1
 
     # Collision joueur-ennemi
     p_center = (int(player_pos.x), int(player_pos.y))
@@ -1366,31 +1527,13 @@ while running:
         pygame.draw.circle(screen, (0, 255, 0), proj_screen, projectile_radius)
         pygame.draw.circle(screen, (255, 255, 255), proj_screen, projectile_radius - 3)
 
-    # Monstres (types: tank, fast, flyer)
+    # Monstres (dog, bird)
     for monster in monsters:
         monster_screen = (int(monster["pos"].x - camera_offset.x),
                          int(monster["pos"].y - camera_offset.y))
         r = monster["radius"]
 
-        # Couleur selon flash
-        base_colors = {
-            "tank": (200, 40, 40),
-            "fast": (255, 140, 0),
-            "flyer": (100, 160, 255),
-        }
-        monster_color = (255, 220, 220) if monster["hit_flash"] > 0 else base_colors.get(monster["type"], (220, 20, 20))
-
-        if monster["type"] == "tank":
-            image = load_image('assets/texture/monster2.webp')
-            if monster["dir"] == -1:
-                image = pygame.transform.flip(image, True, False)
-            image = pygame.transform.scale(image, (image.get_width()*3, image.get_height()*3))
-            image_rect = pygame.Rect(monster_screen[0]-image.get_width()/3, monster_screen[1]-image.get_height()/3, 40, 40)
-
-
-            # Dessiner l'image
-            screen.blit(image, image_rect)
-        elif monster["type"] == "fast":
+        if monster["type"] == "dog":
             image = load_image('assets/texture/monster1.png')
             if monster["dir"] == -1:
                 image = pygame.transform.flip(image, True, False)
@@ -1399,7 +1542,7 @@ while running:
 
             # Dessiner l'image
             screen.blit(image, image_rect)
-        else:  # flyer
+        elif monster["type"] == "bird":
             if cnt2 < 5:
                 monster["anim"] = 'assets/texture/monsterb1.png'
             elif cnt2 < 9:

@@ -1692,6 +1692,8 @@ while running:
         GRAVITY = -GRAVITY
         JUMP_FORCE = -JUMP_FORCE
         DEATH_BELOW_Y = -DEATH_BELOW_Y
+        player_pos.update(spawn_point)
+        player_vel_y = 0
         overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
         overlay.fill((0, 0, 0, 200))
         screen.blit(overlay, (0, 0))
